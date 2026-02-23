@@ -1,0 +1,5 @@
+# Allow direct access to gallery images
+Options -Indexes
+<FilesMatch "\.(jpg|jpeg|png|webp|gif)$">
+    Require all granted
+</FilesMatch>

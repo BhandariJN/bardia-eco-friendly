@@ -1,0 +1,384 @@
+<?php
+/**
+ * CMS — Gallery Images Management
+ */
+
+$pageTitle = 'Gallery Images';
+require_once __DIR__ . '/includes/header.php';
+
+$success = '';
+$error   = '';
+
+// ---------- Handle POST ----------
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'delete') {
+        try {
+            $id    = (int) ($_POST['id'] ?? 0);
+            $fetch = $conn->prepare("SELECT image_url FROM gallery_images WHERE id = ?");
+            $fetch->bind_param('i', $id);
+            $fetch->execute();
+            $imgRow = $fetch->get_result()->fetch_assoc();
+            $fetch->close();
+
+            $stmt = $conn->prepare("DELETE FROM gallery_images WHERE id = ?");
+            $stmt->bind_param('i', $id);
+            if ($stmt->execute()) {
+                $success = 'Image deleted.';
+                if ($imgRow) {
+                    $filename = basename($imgRow['image_url']);
+                    $path     = __DIR__ . '/../storage/gallery/' . $filename;
+                    if (file_exists($path)) @unlink($path);
+                }
+            } else {
+                $error = 'Delete failed.';
+            }
+            $stmt->close();
+        } catch (mysqli_sql_exception $e) {
+            $error = 'Database error during deletion: ' . $e->getMessage();
+        }
+
+    } elseif ($action === 'upload') {
+        $categoryId = (int) ($_POST['category_id'] ?? 0);
+        $files      = $_FILES['images'] ?? null;
+        $maxBytes   = 50 * 1024 * 1024; // 5MB
+        $allowed    = ['image/jpeg', 'image/png', 'image/webp'];
+
+        if ($categoryId <= 0) { $error = 'Please select a category.'; }
+        elseif (!$files || empty($files['name'][0])) { $error = 'Please select at least one image.'; }
+        else {
+            $uploadedCount = 0;
+            $errors = [];
+
+            for ($i = 0; $i < count($files['name']); $i++) {
+                $file = [
+                    'name'     => $files['name'][$i],
+                    'type'     => $files['type'][$i],
+                    'tmp_name' => $files['tmp_name'][$i],
+                    'error'    => $files['error'][$i],
+                    'size'     => $files['size'][$i]
+                ];
+
+                if ($file['error'] !== UPLOAD_ERR_OK) {
+                    $errors[] = "File '{$file['name']}' failed to upload.";
+                    continue;
+                }
+
+                $finfo    = finfo_open(FILEINFO_MIME_TYPE);
+                $mimeType = finfo_file($finfo, $file['tmp_name']);
+                finfo_close($finfo);
+
+                if ($file['size'] > $maxBytes) {
+                    $errors[] = "File '{$file['name']}' is too large (max 5MB).";
+                } elseif (!in_array($mimeType, $allowed, true)) {
+                    $errors[] = "File '{$file['name']}' is an invalid type. Use JPG, PNG or WebP.";
+                } else {
+                    $ext      = pathinfo($file['name'], PATHINFO_EXTENSION);
+                    $filename = time() . '_' . $i . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                    $uploadDir = __DIR__ . '/../storage/gallery/';
+                    if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
+
+                    if (move_uploaded_file($file['tmp_name'], $uploadDir . $filename)) {
+                        $imageUrl = '/bardiya-eco-friendly/storage/gallery/' . $filename;
+                        $altText  = trim($_POST['alt_text'] ?? '');
+                        $order    = (int) ($_POST['display_order'] ?? 0);
+                        
+                        try {
+                            $stmt = $conn->prepare("INSERT INTO gallery_images (category_id, image_url, alt_text, display_order) VALUES (?, ?, ?, ?)");
+                            $stmt->bind_param('issi', $categoryId, $imageUrl, $altText, $order);
+                            if ($stmt->execute()) {
+                                $uploadedCount++;
+                            } else {
+                                @unlink($uploadDir . $filename);
+                                $errors[] = "Failed to save '{$file['name']}' to database.";
+                            }
+                            $stmt->close();
+                        } catch (mysqli_sql_exception $e) {
+                            @unlink($uploadDir . $filename);
+                            $errors[] = "Database error for '{$file['name']}': " . $e->getMessage();
+                        }
+                    } else {
+                        $errors[] = "Failed to move '{$file['name']}' to storage.";
+                    }
+                }
+            }
+            if ($uploadedCount > 0) $success = "Successfully uploaded $uploadedCount image(s).";
+            if (!empty($errors)) $error = implode("<br>", $errors);
+        }
+
+    } elseif ($action === 'update') {
+        try {
+            $id         = (int) ($_POST['id'] ?? 0);
+            $categoryId = (int) ($_POST['category_id'] ?? 0);
+            $altText    = trim($_POST['alt_text'] ?? '');
+            $order      = (int) ($_POST['display_order'] ?? 0);
+            $isActive   = isset($_POST['is_active']) ? 1 : 0;
+            $newFile    = $_FILES['new_image'] ?? null;
+
+            if ($id <= 0) { $error = 'Invalid image ID.'; }
+            else {
+                $conn->begin_transaction();
+                
+                if ($newFile && !empty($newFile['name'])) {
+                    $maxBytes = 5 * 1024 * 1024;
+                    $allowed  = ['image/jpeg', 'image/png', 'image/webp'];
+                    $finfo    = finfo_open(FILEINFO_MIME_TYPE);
+                    $mimeType = finfo_file($finfo, $newFile['tmp_name']);
+                    finfo_close($finfo);
+
+                    if ($newFile['size'] > $maxBytes) { $error = 'Image is too large (max 5MB).'; }
+                    elseif (!in_array($mimeType, $allowed, true)) { $error = 'Invalid file type.'; }
+                    else {
+                        $old = $conn->prepare("SELECT image_url FROM gallery_images WHERE id = ?");
+                        $old->bind_param('i', $id); $old->execute();
+                        $oldRes = $old->get_result()->fetch_assoc();
+                        $old->close();
+
+                        $ext      = pathinfo($newFile['name'], PATHINFO_EXTENSION);
+                        $filename = time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                        if (move_uploaded_file($newFile['tmp_name'], __DIR__ . '/../storage/gallery/' . $filename)) {
+                            $newUrl = '/bardiya-eco-friendly/storage/gallery/' . $filename;
+                            $updFile = $conn->prepare("UPDATE gallery_images SET image_url = ? WHERE id = ?");
+                            $updFile->bind_param('si', $newUrl, $id);
+                            if ($updFile->execute()) {
+                                if ($oldRes) {
+                                    $oldPath = __DIR__ . '/../' . str_replace('/bardiya-eco-friendly/', '', $oldRes['image_url']);
+                                    if (file_exists($oldPath)) @unlink($oldPath);
+                                }
+                            }
+                            $updFile->close();
+                        }
+                    }
+                }
+
+                if (!$error) {
+                    $stmt = $conn->prepare("UPDATE gallery_images SET category_id = ?, alt_text = ?, display_order = ?, is_active = ? WHERE id = ?");
+                    $stmt->bind_param('isiii', $categoryId, $altText, $order, $isActive, $id);
+                    if ($stmt->execute()) {
+                        $conn->commit();
+                        $success = 'Image updated.';
+                    } else {
+                        $conn->rollback();
+                        $error = 'Update failed.';
+                    }
+                    $stmt->close();
+                } else {
+                    $conn->rollback();
+                }
+            }
+        } catch (mysqli_sql_exception $e) {
+            if ($conn->in_transaction) $conn->rollback();
+            $error = 'Database error during update: ' . $e->getMessage();
+        }
+    }
+}
+
+// ---------- Fetch categories ----------
+$catResult  = $conn->query("SELECT id, name FROM gallery_categories ORDER BY display_order ASC");
+$categories = [];
+while ($c = $catResult->fetch_assoc()) {
+    $c['id'] = (int) $c['id'];
+    $categories[] = $c;
+}
+
+// ---------- Optional filter by category ----------
+$filterCat = (int) ($_GET['category_id'] ?? 0);
+
+$imgSql = "SELECT gi.id, gi.category_id, gi.image_url, gi.alt_text, gi.display_order, gi.is_active,
+                  gc.name AS category_name
+           FROM gallery_images gi
+           LEFT JOIN gallery_categories gc ON gi.category_id = gc.id";
+if ($filterCat > 0) $imgSql .= " WHERE gi.category_id = " . $filterCat;
+$imgSql .= " ORDER BY gi.display_order ASC, gi.id ASC";
+
+$images = [];
+$imgRes = $conn->query($imgSql);
+while ($r = $imgRes->fetch_assoc()) {
+    $r['id']            = (int)  $r['id'];
+    $r['category_id']   = (int)  $r['category_id'];
+    $r['display_order'] = (int)  $r['display_order'];
+    $r['is_active']     = (bool) $r['is_active'];
+    $images[] = $r;
+}
+?>
+
+<?php if ($success): ?><div class="alert alert-success"><?= htmlspecialchars($success) ?></div><?php endif; ?>
+<?php if ($error): ?><div class="alert alert-error"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+
+<!-- Upload form -->
+<div class="card" style="margin-bottom:20px;">
+    <div class="card-header"><h2>Upload New Image</h2></div>
+    <div class="card-body">
+        <?php if (empty($categories)): ?>
+            <p style="color:#6b7280;">No gallery categories found. <a href="gallery-categories.php">Create one first.</a></p>
+        <?php else: ?>
+        <form method="POST" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="upload">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="upCat">Category <span style="color:red">*</span></label>
+                    <select id="upCat" name="category_id" class="form-control" required>
+                        <option value="">— Select —</option>
+                        <?php foreach ($categories as $c): ?>
+                            <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['name']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="upAlt">Alt Text</label>
+                    <input type="text" class="form-control" id="upAlt" name="alt_text" placeholder="Tiger in the grass">
+                </div>
+                <div class="form-group">
+                    <label for="upOrder">Display Order</label>
+                    <input type="number" class="form-control" id="upOrder" name="display_order" value="0" min="0">
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="upFile">Select Images <span style="color:red">*</span></label>
+                <input type="file" class="form-control" id="upFile" name="images[]"
+                       accept="image/jpeg,image/png,image/webp" multiple required>
+                <small style="color:#6b7280;font-size:.78rem;">You can select multiple files. JPG, PNG, WebP — max 5MB per image.</small>
+            </div>
+            <button type="submit" class="btn btn-primary">📤 Bulk Upload</button>
+
+        </form>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- Filter + list -->
+<div class="card">
+    <div class="card-header">
+        <h2>Gallery Images</h2>
+        <form method="GET" style="display:flex;gap:8px;align-items:center;">
+            <select name="category_id" class="form-control" style="width:auto;">
+                <option value="">All Categories</option>
+                <?php foreach ($categories as $c): ?>
+                    <option value="<?= $c['id'] ?>" <?= $c['id'] === $filterCat ? 'selected' : '' ?>><?= htmlspecialchars($c['name']) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+        </form>
+    </div>
+    <!-- Desktop table -->
+    <div class="tbl-wrap">
+        <table>
+            <thead>
+                <tr><th style="width:70px;">Preview</th><th>Category</th><th>Alt Text</th><th>Order</th><th>Active</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+            <?php foreach ($images as $img): ?>
+                <tr>
+                    <td>
+                        <img src="<?= htmlspecialchars($img['image_url']) ?>"
+                             alt="<?= htmlspecialchars($img['alt_text'] ?? '') ?>"
+                             style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid #e0e0e0;">
+                    </td>
+                    <td><?= htmlspecialchars($img['category_name'] ?? '—') ?></td>
+                    <td><?= htmlspecialchars($img['alt_text'] ?? '—') ?></td>
+                    <td><?= $img['display_order'] ?></td>
+                    <td><?= $img['is_active'] ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Inactive</span>' ?></td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick='openEdit(<?= htmlspecialchars(json_encode($img), ENT_QUOTES) ?>)'>Edit</button>
+                        <form method="POST" style="display:inline;" onsubmit="return confirmDelete()">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="id" value="<?= $img['id'] ?>">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            <?php if (empty($images)): ?>
+                <tr><td colspan="6" style="color:#6b7280;text-align:center;">No images yet.</td></tr>
+            <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+    <!-- Mobile cards -->
+    <div class="m-cards" style="padding:16px;">
+        <?php foreach ($images as $img): ?>
+        <div class="m-card" style="display:flex;gap:12px;">
+            <img src="<?= htmlspecialchars($img['image_url']) ?>"
+                 alt="" style="width:60px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;">
+            <div style="flex:1;">
+                <div class="m-title"><?= htmlspecialchars($img['alt_text'] ?: 'No alt text') ?></div>
+                <div class="m-row"><span>Category</span><span><?= htmlspecialchars($img['category_name'] ?? '—') ?></span></div>
+                <div class="m-row"><span>Active</span><span><?= $img['is_active'] ? 'Yes' : 'No' ?></span></div>
+                <div class="m-actions">
+                    <button class="btn btn-secondary btn-sm" onclick='openEdit(<?= htmlspecialchars(json_encode($img), ENT_QUOTES) ?>)'>Edit</button>
+                    <form method="POST" onsubmit="return confirmDelete()">
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="id" value="<?= $img['id'] ?>">
+                        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <?php endforeach; ?>
+    </div>
+</div>
+
+<!-- Edit modal -->
+<div class="modal-backdrop" id="editModal">
+    <div class="modal">
+        <h3>Edit Image Metadata</h3>
+        <form method="POST" id="editForm" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="update">
+            <input type="hidden" name="id"     id="eId"     value="">
+            <div class="form-group">
+                <label for="eCat">Category</label>
+                <select id="eCat" name="category_id" class="form-control" required>
+                    <?php foreach ($categories as $c): ?>
+                        <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="eAlt">Alt Text</label>
+                <input type="text" class="form-control" id="eAlt" name="alt_text">
+            </div>
+            <div class="form-group">
+                <label for="eFile">Replace Image (optional)</label>
+                <input type="file" class="form-control" id="eFile" name="new_image"
+                       accept="image/jpeg,image/png,image/webp">
+                <small style="color:#6b7280;font-size:.78rem;">JPG, PNG, WebP — max 5MB</small>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="eOrder">Display Order</label>
+                    <input type="number" class="form-control" id="eOrder" name="display_order" value="0" min="0">
+                </div>
+                <div class="form-group" style="display:flex;align-items:flex-end;">
+                    <div class="check-group">
+                        <input type="checkbox" id="eActive" name="is_active" value="1">
+                        <label for="eActive">Active</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeEdit()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Update</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openEdit(img) {
+    document.getElementById('editModal').classList.add('active');
+    document.getElementById('eId').value    = img.id;
+    document.getElementById('eCat').value   = img.category_id;
+    document.getElementById('eAlt').value   = img.alt_text || '';
+    document.getElementById('eOrder').value = img.display_order || 0;
+    document.getElementById('eActive').checked = !!img.is_active;
+}
+function closeEdit() {
+    document.getElementById('editModal').classList.remove('active');
+}
+document.getElementById('editModal').addEventListener('click', function(e) {
+    if (e.target === this) closeEdit();
+});
+</script>
+
+<?php require_once __DIR__ . '/includes/footer.php'; ?>

@@ -1,0 +1,72 @@
+<?php
+/**
+ * PUT /api/packages/update
+ * Update an existing package (auth required)
+ * Body: { "id":1, "category_id":1, "icon":"🏡", "name":"Rustic", "duration":"2N·3D",
+ *          "price":5000, "currency":"₹", "price_note":"Twin sharing",
+ *          "description":"...", "is_featured":false, "display_order":0, "is_active":true }
+ */
+
+if (getRequestMethod() !== 'PUT') {
+    jsonResponse(405, 'error', null, 'Method not allowed. Use PUT.');
+}
+
+$auth  = requireAuth();
+$input = getJsonInput();
+
+$allowedCurrencies = ['₹', '$', '€', '£'];
+
+$id           = (int)   ($input['id']            ?? 0);
+$categoryId   = (int)   ($input['category_id']   ?? 0);
+$name         = sanitize($input['name']           ?? '');
+$icon         = sanitize($input['icon']           ?? '');
+$duration     = sanitize($input['duration']       ?? '');
+$price        = (float) ($input['price']          ?? 0);
+$currency     =          $input['currency']       ?? '₹';
+$priceNote    = sanitize($input['price_note']     ?? '');
+$description  = sanitize($input['description']    ?? '');
+$isFeatured   = isset($input['is_featured'])   ? (int)(bool)$input['is_featured']   : 0;
+$displayOrder = isset($input['display_order']) ? (int)$input['display_order']       : 0;
+$isActive     = isset($input['is_active'])     ? (int)(bool)$input['is_active']     : 1;
+
+if ($id <= 0)         { jsonResponse(400, 'error', null, 'Valid package id is required.'); }
+if ($categoryId <= 0) { jsonResponse(400, 'error', null, 'Valid category_id is required.'); }
+if (empty($name))     { jsonResponse(400, 'error', null, 'Package name is required.'); }
+if ($price <= 0)      { jsonResponse(400, 'error', null, 'Price must be greater than 0.'); }
+if (!in_array($currency, $allowedCurrencies, true)) {
+    jsonResponse(400, 'error', null, 'Invalid currency. Allowed: ₹, $, €, £');
+}
+
+// Verify package exists
+$check = $conn->prepare("SELECT id FROM packages WHERE id = ?");
+$check->bind_param('i', $id);
+$check->execute();
+$check->store_result();
+if ($check->num_rows === 0) { $check->close(); jsonResponse(404, 'error', null, 'Package not found.'); }
+$check->close();
+
+// Verify category exists
+$catCheck = $conn->prepare("SELECT id FROM package_categories WHERE id = ?");
+$catCheck->bind_param('i', $categoryId);
+$catCheck->execute();
+$catCheck->store_result();
+if ($catCheck->num_rows === 0) { $catCheck->close(); jsonResponse(404, 'error', null, 'Package category not found.'); }
+$catCheck->close();
+
+// Types: i s s s d s s s i i i i  (12 params)
+// category_id, icon, name, duration, price, currency, price_note, description, is_featured, display_order, is_active, id
+$stmt = $conn->prepare(
+    "UPDATE packages
+     SET category_id=?, icon=?, name=?, duration=?, price=?, currency=?, price_note=?, description=?, is_featured=?, display_order=?, is_active=?
+     WHERE id=?"
+);
+$stmt->bind_param('isssdsssiiii', $categoryId, $icon, $name, $duration, $price, $currency, $priceNote, $description, $isFeatured, $displayOrder, $isActive, $id);
+
+if ($stmt->execute()) {
+    $stmt->close();
+    jsonResponse(200, 'success', ['id' => $id], 'Package updated successfully.');
+} else {
+    logError('Package update failed: ' . $stmt->error);
+    $stmt->close();
+    jsonResponse(500, 'error', null, 'Failed to update package.');
+}

@@ -1,0 +1,23 @@
+{
+    "name": "bardiya/eco-friendly",
+    "description": "Homestay Brown Three Backend API",
+    "require": {
+        "php": ">=7.4",
+        "firebase/php-jwt": "^6.10",
+        "vlucas/phpdotenv": "^5.5"
+    },
+    "config": {
+        "audit": {
+            "abandoned": "ignore",
+            "block-insecure": false
+        }
+    },
+    "autoload": {
+        "files": [
+            "includes/config.php",
+            "includes/functions.php",
+            "includes/jwt.php",
+            "includes/auth.php"
+        ]
+    }
+}
