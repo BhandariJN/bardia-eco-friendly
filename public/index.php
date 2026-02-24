@@ -13,8 +13,8 @@ setCorsHeaders();
 
 // Get request URI and clean it
 $requestUri = $_SERVER['REQUEST_URI'];
-$basePath = str_replace('/bardiya-eco-friendly/public', '', parse_url($requestUri, PHP_URL_PATH));
-$basePath = str_replace('/bardiya-eco-friendly', '', $basePath);
+$basePath = str_replace('/bardia-eco-friendly/public', '', parse_url($requestUri, PHP_URL_PATH));
+$basePath = str_replace('/bardia-eco-friendly', '', $basePath);
 $route = rtrim($basePath, '/');
 
 // Route mapping
@@ -92,6 +92,14 @@ $routes = [
     '/api/social-links/create' => $apiDir . '/social-links/create.php',
     '/api/social-links/update' => $apiDir . '/social-links/update.php',
     '/api/social-links/delete' => $apiDir . '/social-links/delete.php',
+
+    // Emails
+    '/api/emails/send-reply'   => $apiDir . '/emails/send-reply.php',
+    '/api/emails/history'      => $apiDir . '/emails/history.php',
+
+    // Email Templates
+    '/api/email-templates/list' => $apiDir . '/email-templates/list.php',
+    '/api/email-templates/get'  => $apiDir . '/email-templates/get.php',
 ];
 
 // Match route

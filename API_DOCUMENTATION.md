@@ -20,7 +20,8 @@
 10. [Contact Methods](#contact-methods)
 11. [Contact Submissions](#contact-submissions)
 12. [Social Links](#social-links)
-13. [Error Handling](#error-handling)
+13. [Email System](#email-system)
+14. [Error Handling](#error-handling)
 
 ---
 
@@ -974,6 +975,282 @@ GET /api/package-features/list?package_id=1
 {
   "status": "error",
   "message": "Failed to fetch social links."
+}
+```
+
+---
+
+## Email System
+
+### Send Email Reply
+
+**Endpoint:** `POST /api/emails/send-reply`  
+**Authentication:** Required (Bearer Token)  
+**Description:** Send email reply to a contact submission
+
+**Headers:**
+```
+Authorization: Bearer <your_jwt_token>
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "submission_id": 5,
+  "subject": "Re: Your Enquiry - Bardiya Eco Friendly",
+  "body_html": "<p>Dear John,</p><p>Thank you for your enquiry...</p>",
+  "body_plain": "Dear John, Thank you for your enquiry..."
+}
+```
+
+**Field Requirements:**
+- `submission_id` (required): Integer, must exist in contact_submissions
+- `subject` (required): String, 5-500 characters
+- `body_html` (required): String, 10-500,000 characters, HTML content
+- `body_plain` (optional): String, plain text version
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Email sent successfully.",
+  "data": {
+    "email_id": 15,
+    "sent_at": "2026-02-24 14:30:00"
+  }
+}
+```
+
+**Error Responses:**
+
+- **400 Bad Request:**
+```json
+{
+  "status": "error",
+  "message": "Valid submission_id is required."
+}
+```
+
+```json
+{
+  "status": "error",
+  "message": "Subject must be at least 5 characters."
+}
+```
+
+```json
+{
+  "status": "error",
+  "message": "Email body must be at least 10 characters."
+}
+```
+
+- **401 Unauthorized:**
+```json
+{
+  "status": "error",
+  "message": "Access denied. No token provided."
+}
+```
+
+- **500 Internal Server Error:**
+```json
+{
+  "status": "error",
+  "message": "Failed to send email"
+}
+```
+
+---
+
+### Get Email History
+
+**Endpoint:** `GET /api/emails/history`  
+**Authentication:** Required (Bearer Token)  
+**Description:** Retrieve email history for a contact submission
+
+**Headers:**
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+**Query Parameters:**
+- `submission_id` (required): Contact submission ID
+
+**Example Request:**
+```
+GET /api/emails/history?submission_id=5
+```
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": 15,
+      "subject": "Re: Your Enquiry - Bardiya Eco Friendly",
+      "body_html": "<p>Dear John...</p>",
+      "sent_at": "2026-02-24 14:30:00",
+      "status": "sent",
+      "error_message": null,
+      "sent_by": "admin"
+    }
+  ]
+}
+```
+
+**Email Status Values:**
+- `sent` - Email sent successfully
+- `failed` - Email sending failed
+- `pending` - Email queued for sending
+
+**Error Responses:**
+
+- **400 Bad Request:**
+```json
+{
+  "status": "error",
+  "message": "Valid submission_id query parameter is required."
+}
+```
+
+- **401 Unauthorized:**
+```json
+{
+  "status": "error",
+  "message": "Access denied. No token provided."
+}
+```
+
+---
+
+### List Email Templates
+
+**Endpoint:** `GET /api/email-templates/list`  
+**Authentication:** Required (Bearer Token)  
+**Description:** Retrieve all active email templates
+
+**Headers:**
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": 1,
+      "name": "booking_enquiry_response",
+      "subject": "Re: Your Enquiry - Bardiya Eco Friendly",
+      "body_html": "<p>Dear {{guest_name}},</p>...",
+      "description": "Standard response for booking enquiries",
+      "is_active": true,
+      "created_at": "2026-02-15 10:00:00",
+      "updated_at": "2026-02-15 10:00:00"
+    }
+  ]
+}
+```
+
+**Template Variables:**
+Available placeholders in templates:
+- `{{guest_name}}` - Guest full name
+- `{{guest_email}}` - Guest email address
+- `{{guest_phone}}` - Guest phone number
+- `{{num_guests}}` - Number of guests
+- `{{preferred_package}}` - Package name
+- `{{travel_dates}}` - Travel dates
+- `{{message}}` - Original message
+- `{{admin_name}}` - Admin username
+- `{{company_name}}` - Company name
+- `{{company_email}}` - Company email
+- `{{company_phone}}` - Company phone
+
+**Error Responses:**
+
+- **401 Unauthorized:**
+```json
+{
+  "status": "error",
+  "message": "Access denied. No token provided."
+}
+```
+
+- **500 Internal Server Error:**
+```json
+{
+  "status": "error",
+  "message": "Failed to fetch email templates."
+}
+```
+
+---
+
+### Get Template with Variables
+
+**Endpoint:** `GET /api/email-templates/get`  
+**Authentication:** Required (Bearer Token)  
+**Description:** Get a specific template with variables replaced from submission data
+
+**Headers:**
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+**Query Parameters:**
+- `template_id` (required): Email template ID
+- `submission_id` (required): Contact submission ID
+
+**Example Request:**
+```
+GET /api/email-templates/get?template_id=1&submission_id=5
+```
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "data": {
+    "template_name": "booking_enquiry_response",
+    "subject": "Re: Your Enquiry - Bardiya Eco Friendly",
+    "body_html": "<p>Dear John Smith,</p><p>Thank you for your interest in Bardiya Eco Friendly!</p><p>We have received your enquiry for <strong>Safari Package</strong> for 4 Guests during March 2026.</p>..."
+  }
+}
+```
+
+**Error Responses:**
+
+- **400 Bad Request:**
+```json
+{
+  "status": "error",
+  "message": "Valid template_id is required."
+}
+```
+
+```json
+{
+  "status": "error",
+  "message": "Valid submission_id is required."
+}
+```
+
+- **404 Not Found:**
+```json
+{
+  "status": "error",
+  "message": "Template not found."
+}
+```
+
+```json
+{
+  "status": "error",
+  "message": "Submission not found."
 }
 ```
 

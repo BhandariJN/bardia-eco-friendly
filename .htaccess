@@ -1,4 +1,4 @@
 RewriteEngine On
-RewriteCond %{REQUEST_URI} !^/bardiya-eco-friendly/storage/
-RewriteCond %{REQUEST_URI} !^/bardiya-eco-friendly/cms/
+RewriteCond %{REQUEST_URI} !^/bardia-eco-friendly/storage/
+RewriteCond %{REQUEST_URI} !^/bardia-eco-friendly/cms/
 RewriteRule ^(.*)$ public/index.php [QSA,L]
