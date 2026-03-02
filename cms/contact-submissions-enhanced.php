@@ -42,8 +42,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ---------- Count per status for badges ----------
 $counts = ['new' => 0, 'read' => 0, 'replied' => 0, 'archived' => 0];
-$cRes = $conn->query("SELECT status, COUNT(*) AS c FROM contact_submissions GROUP BY status");
-while ($cr = $cRes->fetch_assoc()) { $counts[$cr['status']] = (int) $cr['c']; }
+try {
+    $cRes = db_query($conn, "SELECT status, COUNT(*) AS c FROM contact_submissions GROUP BY status");
+    while ($cr = $cRes->fetch_assoc()) { $counts[$cr['status']] = (int) $cr['c']; }
+} catch (RuntimeException $e) {
+    error_log('[contact-submissions-enhanced] counts fetch: ' . $e->getMessage());
+}
 
 // ---------- Active filter ----------
 $filterStatus = $_GET['status'] ?? '';
@@ -69,8 +73,12 @@ $stmt->close();
 
 // Get email templates
 $templates = [];
-$tRes = $conn->query("SELECT id, name, subject, description FROM email_templates WHERE is_active = 1 ORDER BY name ASC");
-while ($t = $tRes->fetch_assoc()) { $templates[] = $t; }
+try {
+    $tRes = db_query($conn, "SELECT id, name, subject, description FROM email_templates WHERE is_active = 1 ORDER BY name ASC");
+    while ($t = $tRes->fetch_assoc()) { $templates[] = $t; }
+} catch (RuntimeException $e) {
+    error_log('[contact-submissions-enhanced] templates fetch: ' . $e->getMessage());
+}
 
 $statusBadge = [
     'new'      => 'badge-green',
