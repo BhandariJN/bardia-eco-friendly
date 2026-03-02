@@ -38,6 +38,10 @@ if (empty($_SESSION['cms_user_id'])) {
     <title><?= htmlspecialchars($pageTitle) ?> — Bardiya Eco CMS</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        // Use PHP's detected or configured base URL for API requests
+        const API_BASE_URL = '<?= rtrim($baseUrl, "/") ?>/public/index.php';
+    </script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 

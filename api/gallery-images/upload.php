@@ -69,8 +69,8 @@ if (!move_uploaded_file($file['tmp_name'], $destination)) {
     jsonResponse(500, 'error', null, 'Failed to save image file.');
 }
 
-// Relative URL (accessible via /bardiya-eco-friendly/storage/gallery/...)
-$imageUrl = '/bardiya-eco-friendly/storage/gallery/' . $filename;
+// Relative URL (no base path in database - will be added dynamically)
+$imageUrl = '/storage/gallery/' . $filename;
 
 $stmt = $conn->prepare(
     "INSERT INTO gallery_images (category_id, image_url, alt_text, display_order) VALUES (?, ?, ?, ?)"

@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
 
                     if (move_uploaded_file($file['tmp_name'], $uploadDir . $filename)) {
-                        $imageUrl = '/bardiya-eco-friendly/storage/gallery/' . $filename;
+                        $imageUrl = '/storage/gallery/' . $filename;
                         $altText  = trim($_POST['alt_text'] ?? '');
                         $order    = (int) ($_POST['display_order'] ?? 0);
                         
@@ -138,12 +138,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $ext      = pathinfo($newFile['name'], PATHINFO_EXTENSION);
                         $filename = time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
                         if (move_uploaded_file($newFile['tmp_name'], __DIR__ . '/../storage/gallery/' . $filename)) {
-                            $newUrl = '/bardiya-eco-friendly/storage/gallery/' . $filename;
+                            $newUrl = '/storage/gallery/' . $filename;
                             $updFile = $conn->prepare("UPDATE gallery_images SET image_url = ? WHERE id = ?");
                             $updFile->bind_param('si', $newUrl, $id);
                             if ($updFile->execute()) {
                                 if ($oldRes) {
-                                    $oldPath = __DIR__ . '/../' . str_replace('/bardiya-eco-friendly/', '', $oldRes['image_url']);
+                                    $oldFilename = basename($oldRes['image_url']);
+                                    $oldPath = __DIR__ . '/../storage/gallery/' . $oldFilename;
                                     if (file_exists($oldPath)) @unlink($oldPath);
                                 }
                             }
@@ -282,7 +283,7 @@ try {
             <?php foreach ($images as $img): ?>
                 <tr>
                     <td>
-                        <img src="<?= htmlspecialchars($img['image_url']) ?>"
+                        <img src="<?= htmlspecialchars(asset_url($img['image_url'])) ?>"
                              alt="<?= htmlspecialchars($img['alt_text'] ?? '') ?>"
                              style="width:56px;height:56px;object-fit:cover;border-radius:6px;border:1px solid #e0e0e0;">
                     </td>
@@ -310,7 +311,7 @@ try {
     <div class="m-cards" style="padding:16px;">
         <?php foreach ($images as $img): ?>
         <div class="m-card" style="display:flex;gap:12px;">
-            <img src="<?= htmlspecialchars($img['image_url']) ?>"
+            <img src="<?= htmlspecialchars(asset_url($img['image_url'])) ?>"
                  alt="" style="width:60px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;">
             <div style="flex:1;">
                 <div class="m-title"><?= htmlspecialchars($img['alt_text'] ?: 'No alt text') ?></div>

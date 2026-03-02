@@ -19,6 +19,8 @@ if (!empty($_SERVER['PATH_INFO'])) {
     $requestUri = $_SERVER['REQUEST_URI'];
     $basePath = str_replace('/bardiya-eco-friendly/public', '', parse_url($requestUri, PHP_URL_PATH));
     $basePath = str_replace('/bardiya-eco-friendly', '', $basePath);
+    $basePath = str_replace('/public/index.php', '', $basePath);
+    $basePath = str_replace('/index.php', '', $basePath);
     $route = rtrim($basePath, '/');
 }
 

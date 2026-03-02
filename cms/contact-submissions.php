@@ -353,7 +353,7 @@ async function loadTemplate() {
     if (!templateId || !currentSubmission) return;
     
     try {
-        const response = await fetch(`/bardiya-eco-friendly/public/index.php/api/email-templates/get?template_id=${templateId}&submission_id=${currentSubmission.id}`);
+        const response = await fetch(`${API_BASE_URL}/api/email-templates/get?template_id=${templateId}&submission_id=${currentSubmission.id}`);
         const data = await response.json();
         
         if (data.status === 'success') {
@@ -388,7 +388,7 @@ async function sendEmail(event) {
     sendBtnLoader.style.display = 'inline';
     
     try {
-        const response = await fetch('/bardiya-eco-friendly/public/index.php/api/emails/send-reply', {
+        const response = await fetch(`${API_BASE_URL}/api/emails/send-reply`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -441,7 +441,7 @@ async function viewSubmission(s) {
     // Load email history
     if (s.email_count > 0) {
         try {
-            const response = await fetch(`/bardiya-eco-friendly/public/index.php/api/emails/history?submission_id=${s.id}`);
+            const response = await fetch(`${API_BASE_URL}/api/emails/history?submission_id=${s.id}`);
             const data = await response.json();
             
             if (data.status === 'success' && data.data.length > 0) {

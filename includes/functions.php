@@ -82,3 +82,28 @@ function logError(string $message): void
     $entry = "[$timestamp] $message" . PHP_EOL;
     file_put_contents($logFile, $entry, FILE_APPEND | LOCK_EX);
 }
+
+/**
+ * Generate asset URL with proper base URL
+ * Converts relative paths to full URLs using BASE_URL from .env
+ * 
+ * @param string $path Relative path (e.g., '/storage/gallery/image.jpg')
+ * @return string Full URL with base URL
+ */
+function asset_url(string $path): string
+{
+    global $baseUrl;
+    
+    // Remove any existing base path or domain from the input
+    $path = preg_replace('#^https?://[^/]+#', '', $path);
+    $path = preg_replace('#^/[^/]+/storage/#', '/storage/', $path);
+    
+    // Ensure path starts with /
+    if (empty($path) || $path[0] !== '/') {
+        $path = '/' . $path;
+    }
+    
+    // Combine base URL with the asset path
+    return $baseUrl . $path;
+}
+

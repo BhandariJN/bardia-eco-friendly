@@ -120,7 +120,26 @@ $conn->set_charset('utf8mb4');
 $conn->query("SET time_zone = '+05:45'");
 
 
-// ── 5. Auto-reconnect helper ──────────────────────────────────────────────────
+// ── 6. Base URL configuration ─────────────────────────────────────────────────
+// Use BASE_URL from .env for generating asset URLs
+// This should be the full URL without trailing slash
+// Example: https://api.bardiaecofriendlyhomestay.com
+if (!isset($baseUrl)) {
+    $baseUrl = $_ENV['BASE_URL'] ?? '';
+    
+    // Auto-detect if not set in .env (fallback)
+    if (empty($baseUrl)) {
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $baseUrl = $protocol . '://' . $host;
+    }
+    
+    // Ensure no trailing slash
+    $baseUrl = rtrim($baseUrl, '/');
+}
+
+
+// ── 7. Auto-reconnect helper ──────────────────────────────────────────────────
 if (!function_exists('db_query')) {
     /**
      * Execute a raw SQL query with automatic reconnect on "MySQL server has gone away".
