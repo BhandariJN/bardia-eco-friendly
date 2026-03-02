@@ -76,7 +76,6 @@ $userStmt->close();
 $variables = getSubmissionVariables($submission, $adminName);
 $renderedSubject = renderEmailTemplate($template['subject'], $variables);
 $renderedBody = renderEmailTemplate($template['body_html'], $variables);
-$renderedBody = wrapEmailTemplate($renderedBody);
 
 jsonResponse(200, 'success', [
     'template_name' => $template['name'],

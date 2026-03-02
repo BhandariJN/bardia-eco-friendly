@@ -175,11 +175,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ---------- Fetch categories ----------
-$catResult  = $conn->query("SELECT id, name FROM gallery_categories ORDER BY display_order ASC");
 $categories = [];
-while ($c = $catResult->fetch_assoc()) {
-    $c['id'] = (int) $c['id'];
-    $categories[] = $c;
+try {
+    $catResult = db_query($conn, "SELECT id, name FROM gallery_categories ORDER BY display_order ASC");
+    while ($c = $catResult->fetch_assoc()) {
+        $c['id'] = (int) $c['id'];
+        $categories[] = $c;
+    }
+} catch (RuntimeException $e) {
+    error_log('[gallery-images] categories fetch: ' . $e->getMessage());
+    $error = 'Could not load gallery categories. Please try again.';
 }
 
 // ---------- Optional filter by category ----------
@@ -192,14 +197,20 @@ $imgSql = "SELECT gi.id, gi.category_id, gi.image_url, gi.alt_text, gi.display_o
 if ($filterCat > 0) $imgSql .= " WHERE gi.category_id = " . $filterCat;
 $imgSql .= " ORDER BY gi.display_order ASC, gi.id ASC";
 
+// ---------- Fetch images ----------
 $images = [];
-$imgRes = $conn->query($imgSql);
-while ($r = $imgRes->fetch_assoc()) {
-    $r['id']            = (int)  $r['id'];
-    $r['category_id']   = (int)  $r['category_id'];
-    $r['display_order'] = (int)  $r['display_order'];
-    $r['is_active']     = (bool) $r['is_active'];
-    $images[] = $r;
+try {
+    $imgRes = db_query($conn, $imgSql);
+    while ($r = $imgRes->fetch_assoc()) {
+        $r['id']            = (int)  $r['id'];
+        $r['category_id']   = (int)  $r['category_id'];
+        $r['display_order'] = (int)  $r['display_order'];
+        $r['is_active']     = (bool) $r['is_active'];
+        $images[] = $r;
+    }
+} catch (RuntimeException $e) {
+    error_log('[gallery-images] images fetch: ' . $e->getMessage());
+    $error = 'Could not load gallery images. Please try again.';
 }
 ?>
 

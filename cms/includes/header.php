@@ -11,19 +11,24 @@ require_once __DIR__ . '/../../includes/config.php';
 
 session_start();
 
+// Determine active page for nav highlight — must happen BEFORE the auth check
+$currentFile = basename($_SERVER['PHP_SELF']);
+
+// Build a reliable CMS-root URL regardless of include depth
+// e.g. /bardiya-eco-friendly/cms/
+$scriptPath = str_replace('\\', '/', $_SERVER['PHP_SELF']);
+$cmsPos     = strpos($scriptPath, '/cms/');
+$cmsBase    = ($cmsPos !== false)
+    ? substr($scriptPath, 0, $cmsPos + 5)   // keeps the trailing slash after /cms/
+    : '/bardiya-eco-friendly/cms/';
+
+$pageTitle  = $pageTitle ?? 'CMS';
+
 // Redirect to login if not authenticated
 if (empty($_SESSION['cms_user_id'])) {
     header('Location: ' . $cmsBase . 'login.php');
     exit;
 }
-
-// Determine active page for nav highlight
-$currentFile = basename($_SERVER['PHP_SELF']);
-
-$cmsBase = str_repeat('../', substr_count(str_replace('\\', '/', $_SERVER['PHP_SELF']), '/cms/') - 0) . '';
-// Simpler approach: relative base from cms/ dir
-$base = '';
-$pageTitle = $pageTitle ?? 'CMS';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -112,11 +117,13 @@ $pageTitle = $pageTitle ?? 'CMS';
         /* ── Mobile hamburger ── */
         .hamburger {
             display: none;
-            position: fixed; top: 12px; left: 12px; z-index: 200;
             background: var(--brand-dk); color: #fff;
             border: none; border-radius: var(--radius);
             padding: 8px 12px; cursor: pointer; font-size: 1.2rem;
+            align-items: center; justify-content: center;
+            transition: background .2s;
         }
+        .hamburger:hover { background: var(--brand); }
         .overlay {
             display: none;
             position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 99;
@@ -133,12 +140,15 @@ $pageTitle = $pageTitle ?? 'CMS';
         .cms-topbar {
             background: var(--white);
             border-bottom: 1px solid var(--border);
-            padding: 14px 24px;
+            padding: 12px 24px;
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 90;
         }
-        .cms-topbar h1 { font-size: 1.1rem; font-weight: 600; }
+        .cms-topbar h1 { font-size: 1.05rem; font-weight: 600; flex: 1; }
         .cms-content { padding: 24px; flex: 1; }
 
         /* ── Alerts ── */
@@ -188,10 +198,10 @@ $pageTitle = $pageTitle ?? 'CMS';
         @media (max-width: 768px) {
             .cms-sidebar { transform: translateX(-100%); }
             .cms-sidebar.open { transform: translateX(0); }
-            .hamburger { display: block; }
+            .hamburger { display: flex; }
             .overlay.active { display: block; }
             .cms-main { margin-left: 0; }
-            .cms-topbar { padding-left: 56px; }
+            .cms-topbar { padding: 10px 16px; }
             .tbl-wrap table { display: none; }
             .m-cards { display: flex; }
         }
@@ -254,7 +264,6 @@ $pageTitle = $pageTitle ?? 'CMS';
 </head>
 <body>
 
-<button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">☰</button>
 <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
 
 <aside class="cms-sidebar" id="sidebar">
@@ -274,6 +283,8 @@ $pageTitle = $pageTitle ?? 'CMS';
         <a href="contact-methods.php" class="<?= $currentFile === 'contact-methods.php' ? 'active' : '' ?>">📞 Methods</a>
         <a href="contact-submissions.php" class="<?= $currentFile === 'contact-submissions.php' ? 'active' : '' ?>">📬 Submissions</a>
         <a href="social-links.php" class="<?= $currentFile === 'social-links.php' ? 'active' : '' ?>">🔗 Social Links</a>
+        <div class="nav-section">Account</div>
+        <a href="profile.php" class="<?= $currentFile === 'profile.php' ? 'active' : '' ?>">👤 My Profile</a>
     </nav>
     <div class="logout">
         <a href="logout.php">⎋ Logout (<?= htmlspecialchars($_SESSION['cms_username'] ?? 'Admin') ?>)</a>
@@ -282,6 +293,7 @@ $pageTitle = $pageTitle ?? 'CMS';
 
 <main class="cms-main">
     <div class="cms-topbar">
+        <button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">☰</button>
         <h1><?= htmlspecialchars($pageTitle) ?></h1>
     </div>
     <div class="cms-content">

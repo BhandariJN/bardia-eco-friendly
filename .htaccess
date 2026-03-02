@@ -1,4 +1,20 @@
 RewriteEngine On
-RewriteCond %{REQUEST_URI} !^/bardia-eco-friendly/storage/
-RewriteCond %{REQUEST_URI} !^/bardia-eco-friendly/cms/
+
+# ─── Security: block direct access to sensitive files ────────────────────
+RewriteRule ^(\.env|composer\.lock|composer\.json)$ - [F,L]
+RewriteRule ^vendor/ - [F,L]
+
+# ─── Pass CMS and storage directories through unchanged ────────────────
+RewriteCond %{REQUEST_URI} ^/bardiya-eco-friendly/cms/ [OR]
+RewriteCond %{REQUEST_URI} ^/bardiya-eco-friendly/storage/
+RewriteRule ^ - [L]
+
+# ─── Root directory → index.php (CMS redirect) ────────────────────────
+RewriteRule ^$ index.php [L]
+
+# ─── If request is an actual file, serve it directly ───────────────────
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# ─── Everything else → API router ──────────────────────────────────
 RewriteRule ^(.*)$ public/index.php [QSA,L]

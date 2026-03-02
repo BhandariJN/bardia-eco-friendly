@@ -7,6 +7,8 @@
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception;
 
+require_once __DIR__ . '/template-engine.php';
+
 /**
  * Send email via SMTP
  * 
@@ -102,11 +104,18 @@ function sendReplyEmail(int $submissionId, string $subject, string $bodyHtml, ?s
     $stmt->close();
 
     // Send email
+    // Fetch dynamic footer data
+    $socialLinks = getSocialLinks($conn);
+    $contactMethods = getContactMethods($conn);
+
+    // Wrap the body in the template for the final email
+    $wrappedBody = wrapEmailTemplate($bodyHtml, $socialLinks, $contactMethods);
+
     $emailResult = sendEmail(
         $submission['email'],
         $submission['full_name'],
         $subject,
-        $bodyHtml,
+        $wrappedBody,
         $bodyPlain
     );
 
@@ -119,7 +128,7 @@ function sendReplyEmail(int $submissionId, string $subject, string $bodyHtml, ?s
         $submission['email'],
         $submission['full_name'],
         $subject,
-        $bodyHtml,
+        $wrappedBody,
         $bodyPlain,
         $userId,
         $status,

@@ -12,10 +12,15 @@ require_once __DIR__ . '/../includes/auth.php';
 setCorsHeaders();
 
 // Get request URI and clean it
-$requestUri = $_SERVER['REQUEST_URI'];
-$basePath = str_replace('/bardia-eco-friendly/public', '', parse_url($requestUri, PHP_URL_PATH));
-$basePath = str_replace('/bardia-eco-friendly', '', $basePath);
-$route = rtrim($basePath, '/');
+// Support PATH_INFO for local XAMPP (e.g. /public/index.php/api/...)
+if (!empty($_SERVER['PATH_INFO'])) {
+    $route = rtrim($_SERVER['PATH_INFO'], '/');
+} else {
+    $requestUri = $_SERVER['REQUEST_URI'];
+    $basePath = str_replace('/bardiya-eco-friendly/public', '', parse_url($requestUri, PHP_URL_PATH));
+    $basePath = str_replace('/bardiya-eco-friendly', '', $basePath);
+    $route = rtrim($basePath, '/');
+}
 
 // Route mapping
 $apiDir = __DIR__ . '/../api';
@@ -30,12 +35,6 @@ $routes = [
     '/api/homestays/create'  => $apiDir . '/homestays/create.php',
     '/api/homestays/update'  => $apiDir . '/homestays/update.php',
     '/api/homestays/delete'  => $apiDir . '/homestays/delete.php',
-
-    // Bookings
-    '/api/bookings/list'     => $apiDir . '/bookings/list.php',
-    '/api/bookings/create'   => $apiDir . '/bookings/create.php',
-    '/api/bookings/update'   => $apiDir . '/bookings/update.php',
-    '/api/bookings/cancel'   => $apiDir . '/bookings/cancel.php',
 
     // Pages
     '/api/pages/list'        => $apiDir . '/pages/list.php',
@@ -58,10 +57,6 @@ $routes = [
     // Package Features
     '/api/package-features/list'  => $apiDir . '/package-features/list.php',
     '/api/package-features/save'  => $apiDir . '/package-features/save.php',
-
-    // Comparison
-    '/api/comparison/list'        => $apiDir . '/comparison/list.php',
-    '/api/comparison/save'        => $apiDir . '/comparison/save.php',
 
     // Gallery Categories
     '/api/gallery-categories/list'   => $apiDir . '/gallery-categories/list.php',

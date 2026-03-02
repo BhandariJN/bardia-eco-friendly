@@ -62,12 +62,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ---------- Fetch categories ----------
 $categories = [];
-$res = $conn->query("SELECT id, name, slug, display_order, is_active FROM gallery_categories ORDER BY display_order ASC, id ASC");
-while ($r = $res->fetch_assoc()) {
-    $r['id'] = (int) $r['id'];
-    $r['display_order'] = (int) $r['display_order'];
-    $r['is_active'] = (bool) $r['is_active'];
-    $categories[] = $r;
+try {
+    $res = db_query($conn, "SELECT id, name, slug, display_order, is_active FROM gallery_categories ORDER BY display_order ASC, id ASC");
+    while ($r = $res->fetch_assoc()) {
+        $r['id'] = (int) $r['id'];
+        $r['display_order'] = (int) $r['display_order'];
+        $r['is_active'] = (bool) $r['is_active'];
+        $categories[] = $r;
+    }
+} catch (RuntimeException $e) {
+    error_log('[gallery-categories] fetch: ' . $e->getMessage());
+    $error = 'Could not load categories. Please try again.';
 }
 ?>
 

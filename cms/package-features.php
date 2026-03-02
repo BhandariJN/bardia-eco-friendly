@@ -10,14 +10,19 @@ $success = '';
 $error   = '';
 
 // ---------- Fetch all packages with category names ----------
-$pkgRes  = $conn->query(
-    "SELECT p.id, p.name, pc.name AS category_name
-     FROM packages p
-     LEFT JOIN package_categories pc ON p.category_id = pc.id
-     ORDER BY pc.display_order ASC, p.display_order ASC, p.id ASC"
-);
 $packages = [];
-while ($p = $pkgRes->fetch_assoc()) { $p['id'] = (int) $p['id']; $packages[] = $p; }
+try {
+    $pkgRes = db_query($conn,
+        "SELECT p.id, p.name, pc.name AS category_name
+         FROM packages p
+         LEFT JOIN package_categories pc ON p.category_id = pc.id
+         ORDER BY pc.display_order ASC, p.display_order ASC, p.id ASC"
+    );
+    while ($p = $pkgRes->fetch_assoc()) { $p['id'] = (int) $p['id']; $packages[] = $p; }
+} catch (RuntimeException $e) {
+    error_log('[package-features] packages fetch: ' . $e->getMessage());
+    $error = 'Could not load packages. Please try again.';
+}
 
 $selectedPkgId = (int) ($_GET['package_id'] ?? ($_POST['package_id'] ?? 0));
 

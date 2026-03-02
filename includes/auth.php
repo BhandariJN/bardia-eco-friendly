@@ -6,21 +6,32 @@
 
 /**
  * Require authentication - call this at the top of protected endpoints
- * Returns the decoded token payload
+ * Returns the decoded token payload or a session-based user object
  */
 function requireAuth(): object
 {
+    // 1. Try JWT token first
     $token = getBearerToken();
-
-    if (!$token) {
-        jsonResponse(401, 'error', null, 'Access denied. No token provided.');
-    }
-
-    $decoded = decodeToken($token);
-
-    if (!$decoded) {
+    if ($token) {
+        $decoded = decodeToken($token);
+        if ($decoded) {
+            return $decoded;
+        }
         jsonResponse(401, 'error', null, 'Invalid or expired token.');
     }
 
-    return $decoded;
+    // 2. Fallback to PHP Session (for CMS usage)
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+
+    if (!empty($_SESSION['cms_user_id'])) {
+        return (object)[
+            'user_id' => (int)$_SESSION['cms_user_id'],
+            'role'    => 'admin' // CMS users are typically admins
+        ];
+    }
+
+    jsonResponse(401, 'error', null, 'Access denied. No authentication provided.');
+    exit; // Should be unreachable due to jsonResponse()
 }

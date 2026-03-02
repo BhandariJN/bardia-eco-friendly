@@ -9,7 +9,7 @@ if (getRequestMethod() !== 'GET') {
 }
 
 $result = $conn->query(
-    "SELECT id, icon, title, detail, href, description, display_order, is_active
+    "SELECT id, icon, title, detail, description, display_order, is_active
      FROM contact_methods
      ORDER BY display_order ASC, id ASC"
 );

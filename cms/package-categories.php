@@ -62,15 +62,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ---------- Fetch categories ----------
 $categories = [];
-$res = $conn->query("SELECT id, name, slug, display_order, is_active FROM package_categories ORDER BY display_order ASC, id ASC");
-while ($r = $res->fetch_assoc()) {
-    $r['id'] = (int) $r['id']; $r['display_order'] = (int) $r['display_order']; $r['is_active'] = (bool) $r['is_active'];
-    // Count packages in this category
-    $cnt = $conn->prepare("SELECT COUNT(*) AS c FROM packages WHERE category_id = ?");
-    $cnt->bind_param('i', $r['id']); $cnt->execute();
-    $r['pkg_count'] = (int) $cnt->get_result()->fetch_assoc()['c'];
-    $cnt->close();
-    $categories[] = $r;
+try {
+    $res = db_query($conn, "
+        SELECT pc.id, pc.name, pc.slug, pc.display_order, pc.is_active, COUNT(p.id) AS pkg_count
+        FROM package_categories pc
+        LEFT JOIN packages p ON pc.id = p.category_id
+        GROUP BY pc.id
+        ORDER BY pc.display_order ASC, pc.id ASC
+    ");
+    while ($r = $res->fetch_assoc()) {
+        $r['id']            = (int)   $r['id'];
+        $r['display_order'] = (int)   $r['display_order'];
+        $r['is_active']     = (bool)  $r['is_active'];
+        $r['pkg_count']     = (int)   $r['pkg_count'];
+        $categories[] = $r;
+    }
+} catch (RuntimeException $e) {
+    error_log('[package-categories] fetch: ' . $e->getMessage());
+    $error = 'Could not load categories. Please try again.';
 }
 ?>
 

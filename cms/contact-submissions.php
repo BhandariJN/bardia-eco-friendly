@@ -1,10 +1,12 @@
 <?php
 /**
- * CMS — Contact Submissions Inbox
+ * CMS — Contact Submissions Inbox with Email Reply
  */
 
 $pageTitle = 'Contact Submissions';
 require_once __DIR__ . '/includes/header.php';
+require_once __DIR__ . '/../includes/mailer.php';
+require_once __DIR__ . '/../includes/template-engine.php';
 
 $success = '';
 $error   = '';
@@ -40,8 +42,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ---------- Count per status for badges ----------
 $counts = ['new' => 0, 'read' => 0, 'replied' => 0, 'archived' => 0];
-$cRes = $conn->query("SELECT status, COUNT(*) AS c FROM contact_submissions GROUP BY status");
-while ($cr = $cRes->fetch_assoc()) { $counts[$cr['status']] = (int) $cr['c']; }
+try {
+    $cRes = db_query($conn, "SELECT status, COUNT(*) AS c FROM contact_submissions GROUP BY status");
+    while ($cr = $cRes->fetch_assoc()) { $counts[$cr['status']] = (int) $cr['c']; }
+} catch (RuntimeException $e) {
+    error_log('[contact-submissions-enhanced] counts fetch: ' . $e->getMessage());
+}
 
 // ---------- Active filter ----------
 $filterStatus = $_GET['status'] ?? '';
@@ -49,7 +55,7 @@ if (!in_array($filterStatus, $allowedStatuses, true)) $filterStatus = '';
 
 // ---------- Fetch submissions ----------
 $submissions = [];
-$sql = "SELECT id, full_name, email, phone, num_guests, preferred_package, travel_dates, message, status, created_at FROM contact_submissions";
+$sql = "SELECT id, full_name, email, phone, num_guests, preferred_package, travel_dates, message, status, email_count, last_email_sent_at, created_at FROM contact_submissions";
 if ($filterStatus !== '') {
     $stmt = $conn->prepare($sql . " WHERE status = ? ORDER BY created_at DESC");
     $stmt->bind_param('s', $filterStatus);
@@ -58,8 +64,21 @@ if ($filterStatus !== '') {
 }
 $stmt->execute();
 $result = $stmt->get_result();
-while ($row = $result->fetch_assoc()) { $row['id'] = (int) $row['id']; $submissions[] = $row; }
+while ($row = $result->fetch_assoc()) { 
+    $row['id'] = (int) $row['id'];
+    $row['email_count'] = (int) $row['email_count'];
+    $submissions[] = $row;
+}
 $stmt->close();
+
+// Get email templates
+$templates = [];
+try {
+    $tRes = db_query($conn, "SELECT id, name, subject, description FROM email_templates WHERE is_active = 1 ORDER BY name ASC");
+    while ($t = $tRes->fetch_assoc()) { $templates[] = $t; }
+} catch (RuntimeException $e) {
+    error_log('[contact-submissions-enhanced] templates fetch: ' . $e->getMessage());
+}
 
 $statusBadge = [
     'new'      => 'badge-green',
@@ -70,16 +89,47 @@ $statusBadge = [
 $statusLabels = ['new' => '🆕 New', 'read' => '👁 Read', 'replied' => '✅ Replied', 'archived' => '📦 Archived'];
 ?>
 
+<!-- Quill.js CDN -->
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+
+<style>
+.email-badge {
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-left: 8px;
+}
+.email-history-item {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 8px;
+}
+.email-history-item .subject {
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+.email-history-item .meta {
+    font-size: 0.8rem;
+    color: #6b7280;
+}
+</style>
+
 <?php if ($success): ?><div class="alert alert-success"><?= htmlspecialchars($success) ?></div><?php endif; ?>
 <?php if ($error):   ?><div class="alert alert-error"><?= htmlspecialchars($error) ?></div><?php endif; ?>
 
 <!-- Status filter tabs -->
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-    <a href="contact-submissions.php" class="btn btn-sm <?= $filterStatus === '' ? 'btn-primary' : 'btn-secondary' ?>">
+    <a href="contact-submissions-enhanced.php" class="btn btn-sm <?= $filterStatus === '' ? 'btn-primary' : 'btn-secondary' ?>">
         All <span style="opacity:.7;">(<?= array_sum($counts) ?>)</span>
     </a>
     <?php foreach ($allowedStatuses as $s): ?>
-    <a href="contact-submissions.php?status=<?= $s ?>" class="btn btn-sm <?= $filterStatus === $s ? 'btn-primary' : 'btn-secondary' ?>">
+    <a href="contact-submissions-enhanced.php?status=<?= $s ?>" class="btn btn-sm <?= $filterStatus === $s ? 'btn-primary' : 'btn-secondary' ?>">
         <?= htmlspecialchars($statusLabels[$s]) ?>
         <?php if ($counts[$s] > 0): ?><span style="background:rgba(255,255,255,.25);border-radius:99px;padding:0 6px;margin-left:2px;"><?= $counts[$s] ?></span><?php endif; ?>
     </a>
@@ -94,7 +144,11 @@ $statusLabels = ['new' => '🆕 New', 'read' => '👁 Read', 'replied' => '✅ R
             <?php foreach ($submissions as $s): ?>
                 <tr>
                     <td>
-                        <strong><?= htmlspecialchars($s['full_name']) ?></strong><br>
+                        <strong><?= htmlspecialchars($s['full_name']) ?></strong>
+                        <?php if ($s['email_count'] > 0): ?>
+                            <span class="email-badge">✉️ <?= $s['email_count'] ?></span>
+                        <?php endif; ?>
+                        <br>
                         <small style="color:#6b7280;"><?= date('d M Y, H:i', strtotime($s['created_at'])) ?></small>
                     </td>
                     <td>
@@ -109,8 +163,9 @@ $statusLabels = ['new' => '🆕 New', 'read' => '👁 Read', 'replied' => '✅ R
                     <td><?= date('d M Y', strtotime($s['created_at'])) ?></td>
                     <td><span class="badge <?= $statusBadge[$s['status']] ?? 'badge' ?>"><?= ucfirst($s['status']) ?></span></td>
                     <td>
+                        <button class="btn btn-primary btn-sm" onclick='openEmailModal(<?= htmlspecialchars(json_encode($s), ENT_QUOTES) ?>)'>✉️ Reply</button>
                         <button class="btn btn-secondary btn-sm" onclick='viewSubmission(<?= htmlspecialchars(json_encode($s), ENT_QUOTES) ?>)'>View</button>
-                        <form method="POST" style="display:inline;" onsubmit="return confirmDelete('Delete this submission?')">
+                        <form method="POST" style="display:inline;" onsubmit="return confirm('Delete this submission?')">
                             <input type="hidden" name="action" value="delete">
                             <input type="hidden" name="id" value="<?= $s['id'] ?>">
                             <button type="submit" class="btn btn-danger btn-sm">✕</button>
@@ -132,14 +187,21 @@ $statusLabels = ['new' => '🆕 New', 'read' => '👁 Read', 'replied' => '✅ R
 <div class="m-cards">
     <?php foreach ($submissions as $s): ?>
     <div class="m-card">
-        <div class="m-title"><?= htmlspecialchars($s['full_name']) ?> <span class="badge <?= $statusBadge[$s['status']] ?? '' ?>"><?= ucfirst($s['status']) ?></span></div>
+        <div class="m-title">
+            <?= htmlspecialchars($s['full_name']) ?> 
+            <span class="badge <?= $statusBadge[$s['status']] ?? '' ?>"><?= ucfirst($s['status']) ?></span>
+            <?php if ($s['email_count'] > 0): ?>
+                <span class="email-badge">✉️ <?= $s['email_count'] ?></span>
+            <?php endif; ?>
+        </div>
         <div class="m-row"><span>Email</span><span><?= htmlspecialchars($s['email']) ?></span></div>
         <div class="m-row"><span>Phone</span><span><?= htmlspecialchars($s['phone']) ?></span></div>
         <div class="m-row"><span>Guests</span><span><?= htmlspecialchars($s['num_guests']) ?></span></div>
         <div class="m-row"><span>Received</span><span><?= date('d M Y', strtotime($s['created_at'])) ?></span></div>
         <div class="m-actions">
+            <button class="btn btn-primary btn-sm" onclick='openEmailModal(<?= htmlspecialchars(json_encode($s), ENT_QUOTES) ?>)'>✉️ Reply</button>
             <button class="btn btn-secondary btn-sm" onclick='viewSubmission(<?= htmlspecialchars(json_encode($s), ENT_QUOTES) ?>)'>View</button>
-            <form method="POST" onsubmit="return confirmDelete()">
+            <form method="POST" onsubmit="return confirm('Delete?')">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="id" value="<?= $s['id'] ?>">
                 <button type="submit" class="btn btn-danger btn-sm">Delete</button>
@@ -169,6 +231,12 @@ $statusLabels = ['new' => '🆕 New', 'read' => '👁 Read', 'replied' => '✅ R
             <div id="vmMessage" style="white-space:pre-wrap;"></div>
         </div>
 
+        <!-- Email History -->
+        <div id="emailHistorySection" style="margin-bottom:16px;display:none;">
+            <div style="font-size:.85rem;font-weight:600;margin-bottom:8px;">📧 Email History</div>
+            <div id="emailHistoryList"></div>
+        </div>
+
         <!-- Quick status update -->
         <form method="POST" id="statusForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
             <input type="hidden" name="action" value="update_status">
@@ -185,8 +253,179 @@ $statusLabels = ['new' => '🆕 New', 'read' => '👁 Read', 'replied' => '✅ R
     </div>
 </div>
 
+<!-- Email Composer Modal -->
+<div class="modal-backdrop" id="emailModal">
+    <div class="modal" style="width:min(900px,96vw);max-height:95vh;">
+        <h3>✉️ Reply to: <span id="emailRecipientName"></span></h3>
+        <p style="color:#6b7280;font-size:0.85rem;margin-bottom:16px;">
+            To: <strong id="emailRecipientEmail"></strong>
+        </p>
+        
+        <form id="emailForm" onsubmit="sendEmail(event)">
+            <input type="hidden" id="emailSubmissionId">
+            
+            <!-- Template Selector -->
+            <div class="form-group">
+                <label>📋 Quick Template (Optional)</label>
+                <select id="templateSelect" class="form-control" onchange="loadTemplate()">
+                    <option value="">-- Select Template --</option>
+                    <?php foreach ($templates as $t): ?>
+                    <option value="<?= $t['id'] ?>" data-name="<?= htmlspecialchars($t['name']) ?>">
+                        <?= htmlspecialchars($t['name']) ?> 
+                        <?php if ($t['description']): ?>- <?= htmlspecialchars($t['description']) ?><?php endif; ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            
+            <!-- Subject -->
+            <div class="form-group">
+                <label>Subject *</label>
+                <input type="text" id="emailSubject" class="form-control" required minlength="5" maxlength="500">
+            </div>
+            
+            <!-- Rich Text Editor -->
+            <div class="form-group">
+                <label>Message *</label>
+                <div id="emailBody" style="height:300px;"></div>
+            </div>
+            
+            <!-- Actions -->
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+                <button type="button" class="btn btn-secondary" onclick="closeEmailModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="sendBtn">
+                    <span id="sendBtnText">📤 Send Email</span>
+                    <span id="sendBtnLoader" style="display:none;">⏳ Sending...</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
-function viewSubmission(s) {
+let currentSubmission = null;
+let quillEditor = null;
+
+// Initialize Quill
+function initEditor() {
+    if (quillEditor) return;
+    
+    quillEditor = new Quill('#emailBody', {
+        theme: 'snow',
+        modules: {
+            toolbar: [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'align': [] }],
+                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                [{ 'indent': '-1' }, { 'indent': '+1' }],
+                ['link'],
+                ['clean']
+            ]
+        },
+        placeholder: 'Type your email message here...'
+    });
+}
+
+function openEmailModal(submission) {
+    currentSubmission = submission;
+    document.getElementById('emailModal').classList.add('active');
+    document.getElementById('emailRecipientName').textContent = submission.full_name;
+    document.getElementById('emailRecipientEmail').textContent = submission.email;
+    document.getElementById('emailSubmissionId').value = submission.id;
+    document.getElementById('emailSubject').value = 'Re: Your Enquiry - Bardiya Eco Friendly';
+    document.getElementById('templateSelect').value = '';
+    
+    // Initialize editor if not already done
+    if (!quillEditor) {
+        initEditor();
+    } else {
+        quillEditor.root.innerHTML = '';
+    }
+}
+
+function closeEmailModal() {
+    document.getElementById('emailModal').classList.remove('active');
+}
+
+async function loadTemplate() {
+    const templateId = document.getElementById('templateSelect').value;
+    if (!templateId || !currentSubmission) return;
+    
+    try {
+        const response = await fetch(`/bardiya-eco-friendly/public/index.php/api/email-templates/get?template_id=${templateId}&submission_id=${currentSubmission.id}`);
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            document.getElementById('emailSubject').value = data.data.subject;
+            quillEditor.root.innerHTML = data.data.body_html;
+        } else {
+            alert('Error loading template: ' + data.message);
+        }
+    } catch (error) {
+        alert('Failed to load template: ' + error.message);
+    }
+}
+
+async function sendEmail(event) {
+    event.preventDefault();
+    
+    const submissionId = document.getElementById('emailSubmissionId').value;
+    const subject = document.getElementById('emailSubject').value;
+    const bodyHtml = quillEditor.root.innerHTML;
+    
+    if (!bodyHtml || bodyHtml.trim().length < 10) {
+        alert('Please enter an email message.');
+        return;
+    }
+    
+    const sendBtn = document.getElementById('sendBtn');
+    const sendBtnText = document.getElementById('sendBtnText');
+    const sendBtnLoader = document.getElementById('sendBtnLoader');
+    
+    sendBtn.disabled = true;
+    sendBtnText.style.display = 'none';
+    sendBtnLoader.style.display = 'inline';
+    
+    try {
+        const response = await fetch('/bardiya-eco-friendly/public/index.php/api/emails/send-reply', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                submission_id: parseInt(submissionId),
+                subject: subject,
+                body_html: bodyHtml,
+                body_plain: stripHtml(bodyHtml)
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            alert('✅ Email sent successfully!');
+            closeEmailModal();
+            location.reload();
+        } else {
+            alert('❌ Error: ' + data.message);
+        }
+    } catch (error) {
+        alert('❌ Failed to send email: ' + error.message);
+    } finally {
+        sendBtn.disabled = false;
+        sendBtnText.style.display = 'inline';
+        sendBtnLoader.style.display = 'none';
+    }
+}
+
+function stripHtml(html) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+}
+
+async function viewSubmission(s) {
     document.getElementById('viewModal').classList.add('active');
     document.getElementById('vmName').textContent    = s.full_name;
     document.getElementById('vmMeta').textContent    = 'Received: ' + s.created_at;
@@ -198,9 +437,59 @@ function viewSubmission(s) {
     document.getElementById('vmDates').textContent   = s.travel_dates || '—';
     document.getElementById('vmMessage').textContent = s.message;
     document.getElementById('vmId').value            = s.id;
+    
+    // Load email history
+    if (s.email_count > 0) {
+        try {
+            const response = await fetch(`/bardiya-eco-friendly/public/index.php/api/emails/history?submission_id=${s.id}`);
+            const data = await response.json();
+            
+            if (data.status === 'success' && data.data.length > 0) {
+                const historyHtml = data.data.map(email => `
+                    <div class="email-history-item">
+                        <div class="subject">${escapeHtml(email.subject)}</div>
+                        <div class="meta">
+                            Sent by ${escapeHtml(email.sent_by)} on ${email.sent_at}
+                            <span class="badge ${email.status === 'sent' ? 'badge-green' : 'badge-red'}">${email.status}</span>
+                        </div>
+                    </div>
+                `).join('');
+                
+                document.getElementById('emailHistoryList').innerHTML = historyHtml;
+                document.getElementById('emailHistorySection').style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Failed to load email history:', error);
+        }
+    } else {
+        document.getElementById('emailHistorySection').style.display = 'none';
+    }
 }
-function closeView() { document.getElementById('viewModal').classList.remove('active'); }
-document.getElementById('viewModal').addEventListener('click', e => { if (e.target === document.getElementById('viewModal')) closeView(); });
+
+function closeView() { 
+    document.getElementById('viewModal').classList.remove('active'); 
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+document.getElementById('viewModal').addEventListener('click', e => { 
+    if (e.target === document.getElementById('viewModal')) closeView(); 
+});
+
+document.getElementById('emailModal').addEventListener('click', e => { 
+    if (e.target === document.getElementById('emailModal')) closeEmailModal(); 
+});
+</script>
+
+<script>
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('open');
+    document.getElementById('overlay').classList.toggle('active');
+}
 </script>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>

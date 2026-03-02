@@ -89,8 +89,9 @@ $statusBadge = [
 $statusLabels = ['new' => '🆕 New', 'read' => '👁 Read', 'replied' => '✅ Replied', 'archived' => '📦 Archived'];
 ?>
 
-<!-- TinyMCE CDN -->
-<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+<!-- Quill.js CDN -->
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 
 <style>
 .email-badge {
@@ -286,7 +287,7 @@ $statusLabels = ['new' => '🆕 New', 'read' => '👁 Read', 'replied' => '✅ R
             <!-- Rich Text Editor -->
             <div class="form-group">
                 <label>Message *</label>
-                <textarea id="emailBody" style="height:400px;"></textarea>
+                <div id="emailBody" style="height:300px;"></div>
             </div>
             
             <!-- Actions -->
@@ -303,30 +304,27 @@ $statusLabels = ['new' => '🆕 New', 'read' => '👁 Read', 'replied' => '✅ R
 
 <script>
 let currentSubmission = null;
-let editorInitialized = false;
+let quillEditor = null;
 
-// Initialize TinyMCE
+// Initialize Quill
 function initEditor() {
-    if (editorInitialized) return;
+    if (quillEditor) return;
     
-    tinymce.init({
-        selector: '#emailBody',
-        height: 400,
-        menubar: false,
-        plugins: [
-            'advlist', 'autolink', 'lists', 'link', 'charmap',
-            'preview', 'searchreplace', 'visualblocks', 'code',
-            'insertdatetime', 'table', 'help', 'wordcount'
-        ],
-        toolbar: 'undo redo | formatselect | bold italic underline | ' +
-                 'alignleft aligncenter alignright alignjustify | ' +
-                 'bullist numlist outdent indent | link | removeformat | code | help',
-        content_style: 'body { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.6; }',
-        branding: false,
-        promotion: false
+    quillEditor = new Quill('#emailBody', {
+        theme: 'snow',
+        modules: {
+            toolbar: [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'align': [] }],
+                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                [{ 'indent': '-1' }, { 'indent': '+1' }],
+                ['link'],
+                ['clean']
+            ]
+        },
+        placeholder: 'Type your email message here...'
     });
-    
-    editorInitialized = true;
 }
 
 function openEmailModal(submission) {
@@ -339,10 +337,10 @@ function openEmailModal(submission) {
     document.getElementById('templateSelect').value = '';
     
     // Initialize editor if not already done
-    if (!editorInitialized) {
+    if (!quillEditor) {
         initEditor();
     } else {
-        tinymce.get('emailBody').setContent('');
+        quillEditor.root.innerHTML = '';
     }
 }
 
@@ -355,12 +353,12 @@ async function loadTemplate() {
     if (!templateId || !currentSubmission) return;
     
     try {
-        const response = await fetch(`/bardia-eco-friendly/api/email-templates/get?template_id=${templateId}&submission_id=${currentSubmission.id}`);
+        const response = await fetch(`/bardiya-eco-friendly/public/index.php/api/email-templates/get?template_id=${templateId}&submission_id=${currentSubmission.id}`);
         const data = await response.json();
         
         if (data.status === 'success') {
             document.getElementById('emailSubject').value = data.data.subject;
-            tinymce.get('emailBody').setContent(data.data.body_html);
+            quillEditor.root.innerHTML = data.data.body_html;
         } else {
             alert('Error loading template: ' + data.message);
         }
@@ -374,7 +372,7 @@ async function sendEmail(event) {
     
     const submissionId = document.getElementById('emailSubmissionId').value;
     const subject = document.getElementById('emailSubject').value;
-    const bodyHtml = tinymce.get('emailBody').getContent();
+    const bodyHtml = quillEditor.root.innerHTML;
     
     if (!bodyHtml || bodyHtml.trim().length < 10) {
         alert('Please enter an email message.');
@@ -390,7 +388,7 @@ async function sendEmail(event) {
     sendBtnLoader.style.display = 'inline';
     
     try {
-        const response = await fetch('/bardia-eco-friendly/api/emails/send-reply', {
+        const response = await fetch('/bardiya-eco-friendly/public/index.php/api/emails/send-reply', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -443,7 +441,7 @@ async function viewSubmission(s) {
     // Load email history
     if (s.email_count > 0) {
         try {
-            const response = await fetch(`/bardia-eco-friendly/api/emails/history?submission_id=${s.id}`);
+            const response = await fetch(`/bardiya-eco-friendly/public/index.php/api/emails/history?submission_id=${s.id}`);
             const data = await response.json();
             
             if (data.status === 'success' && data.data.length > 0) {

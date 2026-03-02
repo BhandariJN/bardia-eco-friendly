@@ -13,7 +13,9 @@ if (!empty($_SESSION['cms_user_id'])) {
     exit;
 }
 
-$error = '';
+$error   = '';
+$success = $_SESSION['success_msg'] ?? '';
+unset($_SESSION['success_msg']);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
@@ -72,6 +74,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <h1>Bardiya Eco CMS</h1>
         <p>Sign in to manage your content</p>
     </div>
+    <?php if ($success): ?>
+        <div style="background:#e8f5e9;border:1px solid #a5d6a7;color:#1b5e20;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:.88rem;">
+            <?= htmlspecialchars($success) ?>
+        </div>
+    <?php endif; ?>
     <?php if ($error): ?>
         <div class="alert-error"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
@@ -84,6 +91,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="form-group">
             <label for="password">Password</label>
             <input type="password" id="password" name="password" autocomplete="current-password" required>
+            <div style="text-align:right;margin-top:4px;">
+                <a href="forgot-password.php" style="font-size:.78rem;color:#2e7d32;text-decoration:none;">Forgot Password?</a>
+            </div>
         </div>
         <button type="submit" class="btn-login">Sign In</button>
     </form>

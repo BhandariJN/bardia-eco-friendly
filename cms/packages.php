@@ -11,9 +11,14 @@ $success = '';
 $error   = '';
 
 // ---------- Fetch categories for dropdown ----------
-$catRes = $conn->query("SELECT id, name FROM package_categories WHERE is_active = 1 ORDER BY display_order ASC, id ASC");
 $pkgCategories = [];
-while ($c = $catRes->fetch_assoc()) { $c['id'] = (int) $c['id']; $pkgCategories[] = $c; }
+try {
+    $catRes = db_query($conn, "SELECT id, name FROM package_categories WHERE is_active = 1 ORDER BY display_order ASC, id ASC");
+    while ($c = $catRes->fetch_assoc()) { $c['id'] = (int) $c['id']; $pkgCategories[] = $c; }
+} catch (RuntimeException $e) {
+    error_log('[packages] categories fetch: ' . $e->getMessage());
+    $error = 'Could not load categories. Please try again.';
+}
 
 // ---------- Handle POST ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -73,20 +78,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ---------- Fetch packages ----------
 $packages = [];
-$res = $conn->query(
-    "SELECT p.id, p.category_id, p.icon, p.name, p.duration, p.price, p.currency, p.price_note, p.description, p.is_featured, p.display_order, p.is_active, pc.name AS category_name
-     FROM packages p LEFT JOIN package_categories pc ON p.category_id = pc.id
-     ORDER BY pc.display_order ASC, p.display_order ASC, p.id ASC"
-);
-while ($r = $res->fetch_assoc()) {
-    $r['id'] = (int) $r['id']; $r['category_id'] = (int) $r['category_id'];
-    $r['price'] = (float) $r['price']; $r['is_featured'] = (bool) $r['is_featured'];
-    $r['display_order'] = (int) $r['display_order']; $r['is_active'] = (bool) $r['is_active'];
-    $packages[] = $r;
+try {
+    $res = db_query($conn,
+        "SELECT p.id, p.category_id, p.icon, p.name, p.duration, p.price, p.currency, p.price_note, p.description, p.is_featured, p.display_order, p.is_active, pc.name AS category_name
+         FROM packages p LEFT JOIN package_categories pc ON p.category_id = pc.id
+         ORDER BY pc.display_order ASC, p.display_order ASC, p.id ASC"
+    );
+    while ($r = $res->fetch_assoc()) {
+        $r['id'] = (int) $r['id']; $r['category_id'] = (int) $r['category_id'];
+        $r['price'] = (float) $r['price']; $r['is_featured'] = (bool) $r['is_featured'];
+        $r['display_order'] = (int) $r['display_order']; $r['is_active'] = (bool) $r['is_active'];
+        $packages[] = $r;
+    }
+} catch (RuntimeException $e) {
+    error_log('[packages] fetch: ' . $e->getMessage());
+    $error = 'Could not load packages. Please try again.';
 }
 
 $currencyOptions = ['₹' => '₹ (NPR)', '$' => '$ (USD)', '€' => '€ (EUR)', '£' => '£ (GBP)'];
 ?>
+
+<style>
+.icon-picker-wrapper { position: relative; }
+.icon-picker-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 42px;
+    background: #fff; border: 1px solid #d1d5db; border-radius: 8px;
+    cursor: pointer; font-size: 1.4rem; transition: all .2s;
+    gap: 4px; padding: 0 10px;
+}
+.icon-picker-btn:hover { border-color: #2e7d32; background: #f0fdf4; }
+.icon-preview-empty { color: #9ca3af; font-size: .85rem; font-family: 'Inter', sans-serif; }
+.icon-preview-selected { font-size: 1.5rem; line-height: 1; }
+.icon-picker-dropdown {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0;
+    z-index: 1000; background: #fff; border: 1px solid #e5e7eb;
+    border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.15);
+    padding: 10px; width: 280px;
+}
+.icon-picker-dropdown.open { display: block; }
+.icon-picker-section { font-size: .7rem; font-weight: 600; color: #6b7280;
+    text-transform: uppercase; letter-spacing: .5px; padding: 6px 4px 4px; }
+.icon-picker-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; }
+.icon-picker-item {
+    display: flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; font-size: 1.4rem; border-radius: 8px;
+    cursor: pointer; border: 2px solid transparent; transition: all .15s;
+    background: transparent;
+}
+.icon-picker-item:hover { background: #f0fdf4; border-color: #a7d7ab; transform: scale(1.15); }
+.icon-picker-item.selected { background: #e8f5e9; border-color: #2e7d32; }
+.icon-picker-footer {
+    margin-top: 10px; padding: 8px; background: #f9fafb; border-radius: 6px;
+    font-size: .8rem; color: #374151; text-align: center; border-top: 1px solid #e5e7eb;
+    font-weight: 500; min-height: 34px; display: flex; align-items: center; justify-content: center;
+}
+</style>
 
 <?php if ($success): ?><div class="alert alert-success"><?= htmlspecialchars($success) ?></div><?php endif; ?>
 <?php if ($error):   ?><div class="alert alert-error"><?= htmlspecialchars($error) ?></div><?php endif; ?>
@@ -171,9 +218,16 @@ $currencyOptions = ['₹' => '₹ (NPR)', '$' => '$ (USD)', '€' => '€ (EUR)'
                 </select>
             </div>
             <div class="form-row">
-                <div class="form-group" style="flex:0 0 80px;">
-                    <label for="fIcon">Icon</label>
-                    <input type="text" class="form-control" id="fIcon" name="icon" maxlength="5" placeholder="🌿">
+                <div class="form-group" style="flex:0 0 140px;">
+                    <label>Icon</label>
+                    <input type="hidden" id="fIcon" name="icon" value="">
+                    <div class="icon-picker-wrapper" id="iconPickerWrapper">
+                        <button type="button" class="icon-picker-btn" id="iconPickerBtn" onclick="toggleIconPicker()">
+                            <span id="iconPreview" class="icon-preview-empty">?</span>
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="margin-left:4px;"><path d="M3 4.5L6 7.5L9 4.5" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                        <div class="icon-picker-dropdown" id="iconPickerDropdown"></div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="fName">Name <span style="color:red">*</span></label>
@@ -231,6 +285,105 @@ $currencyOptions = ['₹' => '₹ (NPR)', '$' => '$ (USD)', '€' => '€ (EUR)'
 </div>
 
 <script>
+// ── Icon Picker ──────────────────────────────────────────────────
+const iconSections = [
+    { label: 'Wildlife & Safari', icons: [
+        { char: '🐅', name: 'Tiger' }, { char: '🦏', name: 'Rhino' }, { char: '🐘', name: 'Elephant' }, 
+        { char: '🐊', name: 'Crocodile' }, { char: '🐬', name: 'Dolphin' }, { char: '🦌', name: 'Deer' }, 
+        { char: '🐒', name: 'Monkey' }, { char: '🦜', name: 'Parrot' }, { char: '🦅', name: 'Eagle' }, 
+        { char: '🦉', name: 'Owl' }, { char: '🐾', name: 'Paws' }
+    ]},
+    { label: 'River & Adventure', icons: [
+        { char: '🚙', name: 'Jeep Safari' }, { char: '🛶', name: 'Canoe' }, { char: '🚶‍♂️', name: 'Jungle Walk' }, 
+        { char: '🥾', name: 'Trekking' }, { char: '🔭', name: 'Spotting' }, { char: '📸', name: 'Photography' }, 
+        { char: '🎣', name: 'Fishing' }, { char: '🎒', name: 'Backpack' }, { char: '🚣', name: 'Boating' }, { char: '🌊', name: 'River' }
+    ]},
+    { label: 'Bardia Hospitality', icons: [
+        { char: '🏡', name: 'Homestay' }, { char: '🏠', name: 'Lodge' }, { char: '🍛', name: 'Thali' }, 
+        { char: '🍲', name: 'Organic Food' }, { char: '🍵', name: 'Milk Tea' }, { char: '🛌', name: 'Bed' }, 
+        { char: '🏮', name: 'Lantern' }, { char: '🥁', name: 'Tharu Dance' }, { char: '🔥', name: 'Campfire' }, 
+        { char: '⛺', name: 'Camping' }, { char: '🧘', name: 'Yoga' }
+    ]},
+    { label: 'Nature & Labels', icons: [
+        { char: '🌳', name: 'Sal Tree' }, { char: '🌴', name: 'Palm Tree' }, { char: '🌅', name: 'Sunrise' }, 
+        { char: '🌌', name: 'Night Sky' }, { char: '⭐', name: 'Rating' }, { char: '✅', name: 'Included' }, 
+        { char: '⚡', name: 'Quick' }, { char: '✨', name: 'Featured' }
+    ]}
+];
+
+const dropdown = document.getElementById('iconPickerDropdown');
+iconSections.forEach(section => {
+    const lbl = document.createElement('div');
+    lbl.className = 'icon-picker-section';
+    lbl.textContent = section.label;
+    dropdown.appendChild(lbl);
+    const grid = document.createElement('div');
+    grid.className = 'icon-picker-grid';
+    section.icons.forEach(ico => {
+        const item = document.createElement('span');
+        item.className = 'icon-picker-item';
+        item.textContent = ico.char;
+        item.title = ico.name; 
+        item.addEventListener('click', () => selectIcon(ico.char));
+        
+        // Dynamic hover name
+        item.addEventListener('mouseenter', () => {
+            pickerFooter.textContent = ico.name;
+            pickerFooter.style.color = 'var(--primary)';
+        });
+        item.addEventListener('mouseleave', () => {
+            pickerFooter.textContent = 'Select an icon';
+            pickerFooter.style.color = '#374151';
+        });
+        
+        grid.appendChild(item);
+    });
+    dropdown.appendChild(grid);
+});
+
+// Append a footer for hover names
+const pickerFooter = document.createElement('div');
+pickerFooter.id = 'iconPickerFooter';
+pickerFooter.className = 'icon-picker-footer';
+pickerFooter.textContent = 'Select an icon';
+dropdown.appendChild(pickerFooter);
+
+function selectIcon(icon) {
+    document.getElementById('fIcon').value = icon;
+    const preview = document.getElementById('iconPreview');
+    preview.textContent = icon;
+    preview.className = 'icon-preview-selected';
+    dropdown.querySelectorAll('.icon-picker-item').forEach(el => {
+        el.classList.toggle('selected', el.textContent === icon);
+    });
+    dropdown.classList.remove('open');
+}
+
+function setIconPreview(icon) {
+    const preview = document.getElementById('iconPreview');
+    if (icon) {
+        preview.textContent = icon;
+        preview.className = 'icon-preview-selected';
+        dropdown.querySelectorAll('.icon-picker-item').forEach(el => {
+            el.classList.toggle('selected', el.textContent === icon);
+        });
+    } else {
+        preview.textContent = '?';
+        preview.className = 'icon-preview-empty';
+        dropdown.querySelectorAll('.icon-picker-item').forEach(el => el.classList.remove('selected'));
+    }
+}
+
+function toggleIconPicker() {
+    dropdown.classList.toggle('open');
+}
+
+document.addEventListener('click', e => {
+    if (!document.getElementById('iconPickerWrapper').contains(e.target)) {
+        dropdown.classList.remove('open');
+    }
+});
+
 function openModal(pkg) {
     document.getElementById('pkgModal').classList.add('active');
     if (pkg) {
@@ -239,6 +392,7 @@ function openModal(pkg) {
         document.getElementById('fId').value         = pkg.id;
         document.getElementById('fCat').value        = pkg.category_id;
         document.getElementById('fIcon').value       = pkg.icon || '';
+        setIconPreview(pkg.icon || '');
         document.getElementById('fName').value       = pkg.name || '';
         document.getElementById('fDuration').value   = pkg.duration || '';
         document.getElementById('fPrice').value      = pkg.price || '';
@@ -253,13 +407,15 @@ function openModal(pkg) {
         document.getElementById('modalTitle').textContent = 'Add Package';
         document.getElementById('fAction').value = 'create';
         document.getElementById('pkgForm').reset();
+        document.getElementById('fIcon').value = '';
+        setIconPreview('');
         document.getElementById('fActive').checked = true;
         document.getElementById('submitBtn').textContent = 'Save Package';
     }
 }
 function closeModal() {
     document.getElementById('pkgModal').classList.remove('active');
-    document.getElementById('pkgForm').reset();
+    dropdown.classList.remove('open');
 }
 document.getElementById('pkgModal').addEventListener('click', function(e) { if (e.target === this) closeModal(); });
 </script>

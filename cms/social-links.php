@@ -59,10 +59,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ---------- Fetch ----------
 $links = [];
-$res = $conn->query("SELECT id, icon_name, label, href, display_order, is_active FROM social_links ORDER BY display_order ASC, id ASC");
-while ($r = $res->fetch_assoc()) {
-    $r['id'] = (int) $r['id']; $r['display_order'] = (int) $r['display_order']; $r['is_active'] = (bool) $r['is_active'];
-    $links[] = $r;
+try {
+    $res = db_query($conn, "SELECT id, icon_name, label, href, display_order, is_active FROM social_links ORDER BY display_order ASC, id ASC");
+    while ($r = $res->fetch_assoc()) {
+        $r['id'] = (int) $r['id']; $r['display_order'] = (int) $r['display_order']; $r['is_active'] = (bool) $r['is_active'];
+        $links[] = $r;
+    }
+} catch (RuntimeException $e) {
+    error_log('[social-links] fetch: ' . $e->getMessage());
+    $error = 'Could not load social links. Please try again.';
 }
 ?>
 
@@ -76,11 +81,14 @@ while ($r = $res->fetch_assoc()) {
 <div class="card">
     <div class="tbl-wrap">
         <table>
-            <thead><tr><th>Icon Name</th><th>Label</th><th>URL</th><th>Order</th><th>Active</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Icon</th><th>Label</th><th>URL</th><th>Order</th><th>Active</th><th>Actions</th></tr></thead>
             <tbody>
             <?php foreach ($links as $l): ?>
                 <tr>
-                    <td><code style="background:#f0f0f0;padding:2px 6px;border-radius:4px;"><?= htmlspecialchars($l['icon_name']) ?></code></td>
+                    <td style="font-size:1.3rem;"><?php
+                        $socialIcons = ['facebook'=>'📘','instagram'=>'📸','twitter'=>'🐦','youtube'=>'▶️','tiktok'=>'🎵','linkedin'=>'💼','whatsapp'=>'💬','pinterest'=>'📌','snapchat'=>'👻','telegram'=>'✈️','reddit'=>'🔴','discord'=>'🎮','viber'=>'💜','messenger'=>'💙','wechat'=>'💚','line'=>'🟢','tumblr'=>'📝','github'=>'🐙','website'=>'🌐','email'=>'✉️','blog'=>'📰'];
+                        echo ($socialIcons[strtolower($l['icon_name'])] ?? '🔗') . ' ';
+                    ?><code style="font-size:.75rem;background:#f0f0f0;padding:1px 5px;border-radius:3px;"><?= htmlspecialchars($l['icon_name']) ?></code></td>
                     <td><strong><?= htmlspecialchars($l['label']) ?></strong></td>
                     <td>
                         <a href="<?= htmlspecialchars($l['href']) ?>" target="_blank" rel="noopener"
@@ -111,7 +119,7 @@ while ($r = $res->fetch_assoc()) {
 <div class="m-cards">
     <?php foreach ($links as $l): ?>
     <div class="m-card">
-        <div class="m-title"><?= htmlspecialchars($l['label']) ?> <small>(<?= htmlspecialchars($l['icon_name']) ?>)</small></div>
+        <div class="m-title"><?php $socialIcons = $socialIcons ?? []; echo ($socialIcons[strtolower($l['icon_name'])] ?? '🔗'); ?> <?= htmlspecialchars($l['label']) ?></div>
         <div class="m-row"><span>URL</span><span style="word-break:break-all;font-size:.78rem;"><?= htmlspecialchars($l['href']) ?></span></div>
         <div class="m-row"><span>Active</span><span><?= $l['is_active'] ? 'Yes' : 'No' ?></span></div>
         <div class="m-actions">
@@ -126,6 +134,39 @@ while ($r = $res->fetch_assoc()) {
     <?php endforeach; ?>
 </div>
 
+<!-- Icon Picker Styles -->
+<style>
+.sl-icon-picker-wrapper { position: relative; }
+.sl-icon-picker-btn {
+    display: flex; align-items: center;
+    width: 100%; height: 42px;
+    background: #fff; border: 1px solid #d1d5db; border-radius: 8px;
+    cursor: pointer; font-size: .9rem; transition: all .2s;
+    gap: 8px; padding: 0 12px;
+}
+.sl-icon-picker-btn:hover { border-color: #2e7d32; background: #f0fdf4; }
+.sl-icon-preview-empty { color: #9ca3af; font-size: .85rem; font-family: 'Inter', sans-serif; }
+.sl-icon-preview-selected { font-size: .9rem; display: flex; align-items: center; gap: 6px; }
+.sl-icon-preview-selected .sl-emoji { font-size: 1.3rem; }
+.sl-icon-picker-dropdown {
+    display: none; position: absolute; top: calc(100% + 6px); left: 0;
+    z-index: 1000; background: #fff; border: 1px solid #e5e7eb;
+    border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.15);
+    padding: 8px; width: 320px; max-height: 300px; overflow-y: auto;
+}
+.sl-icon-picker-dropdown.open { display: block; }
+.sl-icon-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.sl-icon-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; font-size: .85rem; border-radius: 8px;
+    cursor: pointer; border: 2px solid transparent; transition: all .15s;
+    background: transparent; font-family: 'Inter', sans-serif;
+}
+.sl-icon-item:hover { background: #f0fdf4; border-color: #a7d7ab; }
+.sl-icon-item.selected { background: #e8f5e9; border-color: #2e7d32; }
+.sl-icon-item .sl-emoji { font-size: 1.2rem; flex-shrink: 0; }
+</style>
+
 <!-- Modal -->
 <div class="modal-backdrop" id="slModal">
     <div class="modal">
@@ -135,8 +176,15 @@ while ($r = $res->fetch_assoc()) {
             <input type="hidden" name="id"     id="fId"     value="">
             <div class="form-row">
                 <div class="form-group">
-                    <label for="fIconName">Icon Name <span style="color:red">*</span></label>
-                    <input type="text" class="form-control" id="fIconName" name="icon_name" required placeholder="e.g. facebook, instagram, twitter">
+                    <label>Icon <span style="color:red">*</span></label>
+                    <input type="hidden" id="fIconName" name="icon_name" value="">
+                    <div class="sl-icon-picker-wrapper" id="slIconPickerWrapper">
+                        <button type="button" class="sl-icon-picker-btn" id="slIconPickerBtn" onclick="toggleSlIconPicker()">
+                            <span id="slIconPreview" class="sl-icon-preview-empty">Select an icon…</span>
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="margin-left:auto;"><path d="M3 4.5L6 7.5L9 4.5" stroke="#6b7280" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                        <div class="sl-icon-picker-dropdown" id="slIconDropdown"></div>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="fLabel">Label <span style="color:red">*</span></label>
@@ -169,6 +217,86 @@ while ($r = $res->fetch_assoc()) {
 </div>
 
 <script>
+// ── Social Icon Picker ───────────────────────────────────────────
+const slIcons = [
+    { name: 'facebook',  emoji: '📘' },
+    { name: 'instagram', emoji: '📸' },
+    { name: 'twitter',   emoji: '🐦' },
+    { name: 'youtube',   emoji: '▶️' },
+    { name: 'tiktok',    emoji: '🎵' },
+    { name: 'linkedin',  emoji: '💼' },
+    { name: 'whatsapp',  emoji: '💬' },
+    { name: 'pinterest', emoji: '📌' },
+    { name: 'snapchat',  emoji: '👻' },
+    { name: 'telegram',  emoji: '✈️' },
+    { name: 'reddit',    emoji: '🔴' },
+    { name: 'discord',   emoji: '🎮' },
+    { name: 'viber',     emoji: '💜' },
+    { name: 'messenger', emoji: '💙' },
+    { name: 'wechat',    emoji: '💚' },
+    { name: 'line',      emoji: '🟢' },
+    { name: 'tumblr',    emoji: '📝' },
+    { name: 'github',    emoji: '🐙' },
+    { name: 'website',   emoji: '🌐' },
+    { name: 'email',     emoji: '✉️' },
+    { name: 'blog',      emoji: '📰' },
+];
+
+const slDropdown = document.getElementById('slIconDropdown');
+const slGrid = document.createElement('div');
+slGrid.className = 'sl-icon-grid';
+slIcons.forEach(item => {
+    const el = document.createElement('span');
+    el.className = 'sl-icon-item';
+    el.dataset.name = item.name;
+    el.innerHTML = '<span class="sl-emoji">' + item.emoji + '</span>' + item.name;
+    el.addEventListener('click', () => selectSlIcon(item.name, item.emoji));
+    slGrid.appendChild(el);
+});
+slDropdown.appendChild(slGrid);
+
+function selectSlIcon(name, emoji) {
+    document.getElementById('fIconName').value = name;
+    const preview = document.getElementById('slIconPreview');
+    preview.innerHTML = '<span class="sl-emoji">' + emoji + '</span>' + name;
+    preview.className = 'sl-icon-preview-selected';
+    slDropdown.querySelectorAll('.sl-icon-item').forEach(el => {
+        el.classList.toggle('selected', el.dataset.name === name);
+    });
+    slDropdown.classList.remove('open');
+}
+
+function setSlIconPreview(name) {
+    const preview = document.getElementById('slIconPreview');
+    const match = slIcons.find(i => i.name === name);
+    if (match) {
+        preview.innerHTML = '<span class="sl-emoji">' + match.emoji + '</span>' + match.name;
+        preview.className = 'sl-icon-preview-selected';
+        slDropdown.querySelectorAll('.sl-icon-item').forEach(el => {
+            el.classList.toggle('selected', el.dataset.name === name);
+        });
+    } else if (name) {
+        preview.innerHTML = '<span class="sl-emoji">🔗</span>' + name;
+        preview.className = 'sl-icon-preview-selected';
+        slDropdown.querySelectorAll('.sl-icon-item').forEach(el => el.classList.remove('selected'));
+    } else {
+        preview.textContent = 'Select an icon…';
+        preview.className = 'sl-icon-preview-empty';
+        slDropdown.querySelectorAll('.sl-icon-item').forEach(el => el.classList.remove('selected'));
+    }
+}
+
+function toggleSlIconPicker() {
+    slDropdown.classList.toggle('open');
+}
+
+document.addEventListener('click', e => {
+    if (!document.getElementById('slIconPickerWrapper').contains(e.target)) {
+        slDropdown.classList.remove('open');
+    }
+});
+
+// ── Modal ────────────────────────────────────────────────────────
 function openModal(l) {
     document.getElementById('slModal').classList.add('active');
     if (l) {
@@ -176,8 +304,8 @@ function openModal(l) {
         document.getElementById('fAction').value   = 'update';
         document.getElementById('fId').value       = l.id;
         document.getElementById('fIconName').value = l.icon_name || '';
+        setSlIconPreview(l.icon_name || '');
         document.getElementById('fLabel').value    = l.label || '';
-
         document.getElementById('fHref').value     = l.href || '';
         document.getElementById('fOrder').value    = l.display_order || 0;
         document.getElementById('fActive').checked = !!l.is_active;
@@ -186,11 +314,16 @@ function openModal(l) {
         document.getElementById('modalTitle').textContent = 'Add Social Link';
         document.getElementById('fAction').value = 'create';
         document.getElementById('slForm').reset();
+        document.getElementById('fIconName').value = '';
+        setSlIconPreview('');
         document.getElementById('fActive').checked = true;
         document.getElementById('submitBtn').textContent = 'Save';
     }
 }
-function closeModal() { document.getElementById('slModal').classList.remove('active'); }
+function closeModal() {
+    document.getElementById('slModal').classList.remove('active');
+    slDropdown.classList.remove('open');
+}
 document.getElementById('slModal').addEventListener('click', e => { if (e.target === document.getElementById('slModal')) closeModal(); });
 </script>
 
