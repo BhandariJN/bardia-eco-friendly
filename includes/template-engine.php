@@ -42,7 +42,7 @@ function getSubmissionVariables(array $submission, string $adminName = 'Admin'):
         'travel_dates'      => $submission['travel_dates'] ?? 'N/A',
         'message'           => $submission['message'] ?? '',
         'admin_name'        => $adminName,
-        'company_name'      => 'Bardiya Eco Friendly',
+        'company_name'      => 'Bardia Eco-Friendly Homestay',
         'company_email'     => $_ENV['MAIL_FROM_ADDRESS'] ?? 'info@bardiyaecofriendly.com',
         'company_phone'     => '+977-084-123456',
     ];
@@ -127,10 +127,10 @@ function wrapEmailTemplate(string $content, array $socialLinks = [], array $cont
     }
 
     // Company info
-    $companyName  = "Bardiya Eco Friendly";
+    $companyName  = "Bardia Eco-Friendly Homestay";
     $companyAddr  = "Thakurdwara, Bardiya, Nepal";
     $companyEmail = "inquiry@bardiaecofriendlyhomestay.com";
-    $companyPhone = "+977-9845000000";
+    $companyPhone = "+977-9842364787";
 
     return <<<HTML
 <!DOCTYPE html>
