@@ -32,7 +32,7 @@ $isActive     = isset($input['is_active'])     ? (int)(bool)$input['is_active'] 
 if ($id <= 0)         { jsonResponse(400, 'error', null, 'Valid package id is required.'); }
 if ($categoryId <= 0) { jsonResponse(400, 'error', null, 'Valid category_id is required.'); }
 if (empty($name))     { jsonResponse(400, 'error', null, 'Package name is required.'); }
-if ($price <= 0)      { jsonResponse(400, 'error', null, 'Price must be greater than 0.'); }
+if ($price < 0)       { jsonResponse(400, 'error', null, 'Price must be 0 or greater.'); }
 if (!in_array($currency, $allowedCurrencies, true)) {
     jsonResponse(400, 'error', null, 'Invalid currency. Allowed: ₹, $, €, £');
 }

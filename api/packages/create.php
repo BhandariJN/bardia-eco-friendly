@@ -34,8 +34,8 @@ if ($categoryId <= 0) {
 if (empty($name)) {
     jsonResponse(400, 'error', null, 'Package name is required.');
 }
-if ($price <= 0) {
-    jsonResponse(400, 'error', null, 'Price must be greater than 0.');
+if ($price < 0) {
+    jsonResponse(400, 'error', null, 'Price must be 0 or greater.');
 }
 if (!in_array($currency, $allowedCurrencies, true)) {
     jsonResponse(400, 'error', null, 'Invalid currency. Allowed: ₹, $, €, £');

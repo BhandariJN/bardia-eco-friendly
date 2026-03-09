@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($categoryId <= 0)                               { $error = 'Please select a category.'; }
         elseif (empty($name))                               { $error = 'Package name is required.'; }
-        elseif ($price <= 0)                                { $error = 'Price must be greater than 0.'; }
+        elseif ($price < 0)                                 { $error = 'Price must be 0 or greater.'; }
         elseif (!in_array($currency, $allowedCurrencies, true)) { $error = 'Invalid currency.'; }
         else {
             if ($action === 'create') {
@@ -247,7 +247,7 @@ $currencyOptions = ['₹' => '₹ (NPR)', '$' => '$ (USD)', '€' => '€ (EUR)'
             <div class="form-row">
                 <div class="form-group">
                     <label for="fPrice">Price <span style="color:red">*</span></label>
-                    <input type="number" class="form-control" id="fPrice" name="price" min="0.01" step="0.01" required>
+                    <input type="number" class="form-control" id="fPrice" name="price" min="0" step="0.01" required>
                 </div>
                 <div class="form-group">
                     <label for="fCurrency">Currency</label>
